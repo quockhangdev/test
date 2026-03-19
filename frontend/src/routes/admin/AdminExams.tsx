@@ -118,8 +118,8 @@ export default function AdminExams() {
                   <Alert severity="info">Chưa có đề.</Alert>
                 ) : (
                   <>
-                    <TableContainer sx={{ border: 1, borderColor: "divider", borderRadius: 2 }}>
-                      <Table size="small" stickyHeader>
+                    <TableContainer sx={{ border: 1, borderColor: "divider", borderRadius: 2, overflowX: "auto" }}>
+                      <Table size="small" stickyHeader sx={{ minWidth: 860 }}>
                         <TableHead>
                           <TableRow>
                             <TableCell sx={{ width: 70 }}>ID</TableCell>
@@ -127,8 +127,8 @@ export default function AdminExams() {
                             <TableCell sx={{ width: 90 }}>Phút</TableCell>
                             <TableCell sx={{ width: 90 }}>Pass</TableCell>
                             <TableCell sx={{ width: 110 }}>Trạng thái</TableCell>
-                            <TableCell sx={{ width: 220 }}>Tags</TableCell>
-                            <TableCell>Mô tả</TableCell>
+                            <TableCell sx={{ width: 220, display: { xs: "none", md: "table-cell" } }}>Tags</TableCell>
+                            <TableCell sx={{ display: { xs: "none", md: "table-cell" } }}>Mô tả</TableCell>
                             <TableCell align="right" sx={{ width: 120 }}>
                               Thao tác
                             </TableCell>
@@ -158,12 +158,12 @@ export default function AdminExams() {
                                   {e.is_published ? "Published" : "Draft"}
                                 </Typography>
                               </TableCell>
-                              <TableCell sx={{ maxWidth: 220 }}>
+                              <TableCell sx={{ maxWidth: 220, display: { xs: "none", md: "table-cell" } }}>
                                 <Typography variant="body2" color="text.secondary" noWrap title={(e.tags || []).join(", ")}>
                                   {(e.tags || []).length ? (e.tags || []).join(", ") : "—"}
                                 </Typography>
                               </TableCell>
-                              <TableCell sx={{ maxWidth: 520 }}>
+                              <TableCell sx={{ maxWidth: 520, display: { xs: "none", md: "table-cell" } }}>
                                 <Typography variant="body2" color="text.secondary" noWrap title={e.description || ""}>
                                   {e.description || "—"}
                                 </Typography>

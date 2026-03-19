@@ -133,13 +133,13 @@ export default function AdminUsers() {
               <Alert severity="info">Không có user.</Alert>
             ) : (
               <>
-                <TableContainer sx={{ border: 1, borderColor: "divider", borderRadius: 2 }}>
-                  <Table size="small" stickyHeader>
+                <TableContainer sx={{ border: 1, borderColor: "divider", borderRadius: 2, overflowX: "auto" }}>
+                  <Table size="small" stickyHeader sx={{ minWidth: 760 }}>
                     <TableHead>
                       <TableRow>
                         <TableCell sx={{ width: 70 }}>ID</TableCell>
                         <TableCell>Email</TableCell>
-                        <TableCell>Tên</TableCell>
+                        <TableCell sx={{ display: { xs: "none", md: "table-cell" } }}>Tên</TableCell>
                         <TableCell sx={{ width: 120 }}>Role</TableCell>
                         <TableCell align="right" sx={{ width: 220 }}>
                           Thao tác
@@ -155,7 +155,7 @@ export default function AdminUsers() {
                               {r.email}
                             </Typography>
                           </TableCell>
-                          <TableCell>
+                          <TableCell sx={{ display: { xs: "none", md: "table-cell" } }}>
                             <Typography variant="body2" color={r.full_name ? "text.primary" : "text.secondary"}>
                               {r.full_name || "—"}
                             </Typography>

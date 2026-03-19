@@ -591,7 +591,7 @@ export default function TakeExam() {
             ) : visibleQuestions.length === 0 ? (
               <Alert severity="info">Chưa có câu hỏi cho đề này.</Alert>
             ) : (
-              <Grid container spacing={2}>
+              <Grid container>
                 <Grid item xs={12} md={3} lg={2.5}>
                   <Card variant="outlined">
                     <CardContent sx={{ p: 1.25 }}>
@@ -607,10 +607,12 @@ export default function TakeExam() {
                             setActiveIdx(Number(v));
                           }}
                           sx={{
-                            flexWrap: "wrap",
-                            maxHeight: 320,
-                            overflow: "auto",
-                            alignContent: "flex-start"
+                            flexWrap: { xs: "nowrap", md: "wrap" },
+                            maxHeight: { xs: 64, md: 320 },
+                            overflowX: { xs: "auto", md: "hidden" },
+                            overflowY: { xs: "hidden", md: "auto" },
+                            alignContent: { xs: "center", md: "flex-start" },
+                            "& .MuiToggleButtonGroup-grouped": { mr: 0.5 }
                           }}
                         >
                           {visibleQuestions.map((q, idx) => (
@@ -631,6 +633,7 @@ export default function TakeExam() {
                             variant="outlined"
                             disabled={activeIdx <= 0}
                             onClick={() => setActiveIdx((i) => Math.max(0, i - 1))}
+                            fullWidth
                           >
                             Trước
                           </Button>
@@ -639,6 +642,7 @@ export default function TakeExam() {
                             variant="outlined"
                             disabled={activeIdx >= visibleQuestions.length - 1}
                             onClick={() => setActiveIdx((i) => Math.min(visibleQuestions.length - 1, i + 1))}
+                            fullWidth
                           >
                             Sau
                           </Button>
@@ -884,8 +888,8 @@ function QuestionView({
   onChange: (v: any) => void;
 }) {
   return (
-    <Card variant="outlined" sx={{ marginRight: 3 }}>
-      <CardContent sx={{ p: { xs: 1.5, md: 2 } }}>
+    <Card variant="outlined" sx={{ mr: { xs: 0, md: 3 } }}>
+      <CardContent sx={{ p: { xs: 1.5, md: 2 }, pr: { xs: 2.5, md: 2 } }}>
         <Stack spacing={1}>
           <Stack direction="row" alignItems="baseline" spacing={1}>
             <Typography fontWeight={800}>Câu {index}</Typography>

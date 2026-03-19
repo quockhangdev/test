@@ -68,7 +68,7 @@ export default function Home() {
   }
 
   return (
-    <Stack spacing={2}>
+    <Stack>
       {err && <Alert severity="error">{err}</Alert>}
 
       <Grid container spacing={2}>
@@ -83,12 +83,12 @@ export default function Home() {
               }}
             >
               <CardActionArea component={Link} to={`/exams/${e.id}`} sx={{ display: "block" }}>
-                <CardContent sx={{ p: 2 }}>
-                  <Stack direction="row" spacing={1.5} alignItems="flex-start">
+                <CardContent sx={{ p: { xs: 1.5, sm: 2 } }}>
+                  <Stack direction="row" spacing={1.25} alignItems="flex-start">
                     <Box
                       sx={{
-                        width: 44,
-                        height: 44,
+                        width: { xs: 40, sm: 44 },
+                        height: { xs: 40, sm: 44 },
                         borderRadius: 2,
                         bgcolor: "primary.main",
                         color: "primary.contrastText",
@@ -108,6 +108,14 @@ export default function Home() {
                         </Typography>
                         <IconButton
                           size="small"
+                          onMouseDown={(ev) => {
+                            ev.preventDefault();
+                            ev.stopPropagation();
+                          }}
+                          onTouchStart={(ev) => {
+                            ev.preventDefault();
+                            ev.stopPropagation();
+                          }}
                           onClick={async (ev) => {
                             ev.preventDefault();
                             ev.stopPropagation();
@@ -129,7 +137,13 @@ export default function Home() {
                         </IconButton>
                       </Stack>
 
-                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        flexWrap="wrap"
+                        useFlexGap
+                        sx={{ rowGap: 0.75, columnGap: 0.75 }}
+                      >
                         <Chip
                           size="small"
                           variant="outlined"
@@ -139,9 +153,10 @@ export default function Home() {
                         {e.requires_password && (
                           <Chip size="small" color="warning" variant="outlined" icon={<LockOutlinedIcon />} label="Có mật khẩu" />
                         )}
-                        {(e.tags || []).slice(0, 4).map((t) => (
+                        {(e.tags || []).slice(0, 3).map((t) => (
                           <Chip key={t} size="small" variant="outlined" label={t} />
                         ))}
+                        {(e.tags || []).length > 3 && <Chip size="small" variant="outlined" label={`+${(e.tags || []).length - 3}`} />}
                       </Stack>
 
                       {e.description ? (
@@ -155,7 +170,7 @@ export default function Home() {
                       )}
 
                       <Stack direction="row" justifyContent="flex-end">
-                        <Button variant="contained" size="small" endIcon={<PlayArrowRoundedIcon />}>
+                        <Button variant="contained" size="small" fullWidth={false} sx={{ width: { xs: "100%", sm: "auto" } }} endIcon={<PlayArrowRoundedIcon />}>
                           Vào làm bài
                         </Button>
                       </Stack>

@@ -6,11 +6,11 @@ import PeopleOutlineOutlinedIcon from "@mui/icons-material/PeopleOutlineOutlined
 
 export default function AdminHome() {
   return (
-    <Stack spacing={2}>
+    <Stack spacing={0}>
       <Typography variant="h6" fontWeight={800}>
         Quản trị hệ thống
       </Typography>
-      <Grid container spacing={2}>
+      <Grid container spacing={2} sx={{ mt: 1 }}>
         <Grid item xs={12} sm={6} md={4}>
           <Card variant="outlined">
             <CardActionArea component={Link} to="/admin/exams">

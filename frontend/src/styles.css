@@ -1,4 +1,7 @@
 /* Keep only minimal styles that complement MUI */
+pre {
+  max-width: 100%;
+}
 pre code {
   display: block;
   overflow-x: auto;
