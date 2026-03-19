@@ -9,6 +9,7 @@ import {
   CardContent,
   Chip,
   Grid,
+  IconButton,
   Skeleton,
   Stack,
   Typography
@@ -16,6 +17,8 @@ import {
 import PlayArrowRoundedIcon from "@mui/icons-material/PlayArrowRounded";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import TimerOutlinedIcon from "@mui/icons-material/TimerOutlined";
+import StarBorderOutlinedIcon from "@mui/icons-material/StarBorderOutlined";
+import StarOutlinedIcon from "@mui/icons-material/StarOutlined";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 
@@ -28,6 +31,8 @@ export default function Home() {
       description: string | null;
       duration_minutes: number | null;
       requires_password: boolean;
+      tags: string[];
+      is_favorite: boolean;
     }> | null
   >(null);
   const [err, setErr] = useState<string | null>(null);
@@ -101,6 +106,27 @@ export default function Home() {
                         <Typography fontWeight={900} noWrap title={e.title} sx={{ flex: 1 }}>
                           {e.title}
                         </Typography>
+                        <IconButton
+                          size="small"
+                          onClick={async (ev) => {
+                            ev.preventDefault();
+                            ev.stopPropagation();
+                            try {
+                              if (!token) return;
+                              const next = !e.is_favorite;
+                              if (next) await api.favoriteExam(token, e.id);
+                              else await api.unfavoriteExam(token, e.id);
+                              setExams((prev) =>
+                                prev ? prev.map((x) => (x.id === e.id ? { ...x, is_favorite: next } : x)) : prev
+                              );
+                            } catch (ex: any) {
+                              setErr(ex?.message || "favorite_failed");
+                            }
+                          }}
+                          aria-label={e.is_favorite ? "Bỏ yêu thích" : "Yêu thích"}
+                        >
+                          {e.is_favorite ? <StarOutlinedIcon color="warning" /> : <StarBorderOutlinedIcon />}
+                        </IconButton>
                       </Stack>
 
                       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
@@ -113,6 +139,9 @@ export default function Home() {
                         {e.requires_password && (
                           <Chip size="small" color="warning" variant="outlined" icon={<LockOutlinedIcon />} label="Có mật khẩu" />
                         )}
+                        {(e.tags || []).slice(0, 4).map((t) => (
+                          <Chip key={t} size="small" variant="outlined" label={t} />
+                        ))}
                       </Stack>
 
                       {e.description ? (

@@ -21,6 +21,7 @@ class ExamUpsertIn(BaseModel):
     description: str | None = None
     is_published: bool = False
     duration_minutes: int | None = Field(default=None, ge=1, le=600)
+    tags: list[str] = Field(default_factory=list)
     # Nếu gửi chuỗi rỗng => xoá password
     access_password: str | None = Field(default=None, max_length=200)
 

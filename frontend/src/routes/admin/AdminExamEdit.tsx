@@ -94,6 +94,7 @@ export default function AdminExamEdit() {
   const [published, setPublished] = useState(false);
   const [durationMinutes, setDurationMinutes] = useState<number>(45);
   const [accessPassword, setAccessPassword] = useState<string>("");
+  const [tagsText, setTagsText] = useState<string>("");
 
   // question builder
   const [part, setPart] = useState<1 | 2>(1);
@@ -160,9 +161,18 @@ export default function AdminExamEdit() {
       setPublished(!!ex.is_published);
       setDurationMinutes(Number.isFinite(ex.duration_minutes) ? (ex.duration_minutes as number) : 45);
       setAccessPassword("");
+      setTagsText(Array.isArray(ex.tags) ? ex.tags.join(", ") : "");
     }
     const qs = await api.admin.listQuestions(token, Number(examId));
     setQuestions(qs);
+  }
+
+  function parseTags(s: string): string[] {
+    const parts = s
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+    return Array.from(new Set(parts)).slice(0, 20);
   }
 
   useEffect(() => {
@@ -415,6 +425,16 @@ export default function AdminExamEdit() {
                   <Grid item xs={12} md={8}>
                     <TextField
                       size="small"
+                      label="Tags (phân tách bằng dấu phẩy)"
+                      value={tagsText}
+                      onChange={(e) => setTagsText(e.target.value)}
+                      placeholder="SQL, C++, HTML"
+                      fullWidth
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={8}>
+                    <TextField
+                      size="small"
                       label="Password đề"
                       type="password"
                       value={accessPassword}
@@ -456,7 +476,8 @@ export default function AdminExamEdit() {
                               description: description.trim() || null,
                               is_published: published,
                               duration_minutes: Number.isFinite(durationMinutes) ? durationMinutes : null,
-                              access_password: accessPassword === "" ? null : accessPassword
+                              access_password: accessPassword === "" ? null : accessPassword,
+                              tags: parseTags(tagsText)
                             });
                             await reloadAll();
                             setExamInfoExpanded(false);

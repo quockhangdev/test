@@ -11,7 +11,7 @@ from flask_jwt_extended import (
 from pydantic import ValidationError
 
 from . import db
-from .models import Attempt, Exam, Question, Role, Track, User
+from .models import Attempt, Exam, Favorite, Question, Role, Track, User
 from .schemas import (
     AttemptStartIn,
     AttemptSubmitIn,
@@ -101,6 +101,15 @@ def me():
 @jwt_required(optional=True)
 def list_exams():
     exams = Exam.query.filter_by(is_published=True).order_by(Exam.created_at.desc()).all()
+    uid = None
+    try:
+        ident = get_jwt_identity()
+        uid = int(ident) if ident is not None else None
+    except Exception:
+        uid = None
+    fav_ids = set()
+    if uid:
+        fav_ids = {f.exam_id for f in Favorite.query.filter_by(user_id=uid).all()}
     return jsonify(
         [
             {
@@ -108,6 +117,10 @@ def list_exams():
                 "title": e.title,
                 "description": e.description,
                 "is_published": e.is_published,
+                "duration_minutes": e.duration_minutes,
+                "requires_password": bool(e.access_password_hash),
+                "tags": json_loads(e.tags_json) or [],
+                "is_favorite": (e.id in fav_ids) if uid else False,
                 "created_at": e.created_at.isoformat(),
             }
             for e in exams
@@ -154,9 +167,38 @@ def get_exam(exam_id: int):
             "description": exam.description,
             "duration_minutes": exam.duration_minutes,
             "requires_password": bool(exam.access_password_hash),
+            "tags": json_loads(exam.tags_json) or [],
             "questions": q_out,
         }
     )
+
+
+@api_bp.post("/exams/<int:exam_id>/favorite")
+@jwt_required()
+def favorite_exam(exam_id: int):
+    exam = Exam.query.get(exam_id)
+    if not exam or not exam.is_published:
+        return jsonify({"error": "not_found"}), 404
+    uid = int(get_jwt_identity())
+    existing = Favorite.query.filter_by(user_id=uid, exam_id=exam_id).first()
+    if existing:
+        return jsonify({"ok": True, "is_favorite": True})
+    fav = Favorite(user_id=uid, exam_id=exam_id)
+    db.session.add(fav)
+    db.session.commit()
+    return jsonify({"ok": True, "is_favorite": True})
+
+
+@api_bp.delete("/exams/<int:exam_id>/favorite")
+@jwt_required()
+def unfavorite_exam(exam_id: int):
+    uid = int(get_jwt_identity())
+    existing = Favorite.query.filter_by(user_id=uid, exam_id=exam_id).first()
+    if not existing:
+        return jsonify({"ok": True, "is_favorite": False})
+    db.session.delete(existing)
+    db.session.commit()
+    return jsonify({"ok": True, "is_favorite": False})
 
 
 @api_bp.post("/exams/<int:exam_id>/attempts/start")
@@ -380,6 +422,7 @@ def admin_list_exams():
                 "is_published": e.is_published,
                 "duration_minutes": e.duration_minutes,
                 "requires_password": bool(e.access_password_hash),
+                "tags": json_loads(e.tags_json) or [],
                 "created_at": e.created_at.isoformat(),
                 "updated_at": e.updated_at.isoformat(),
             }
@@ -405,6 +448,7 @@ def admin_create_exam():
         is_published=payload.is_published,
         duration_minutes=payload.duration_minutes,
         access_password_hash=pw_hash,
+        tags_json=json_dumps(payload.tags or []),
     )
     db.session.add(exam)
     db.session.commit()
@@ -425,6 +469,7 @@ def admin_update_exam(exam_id: int):
     exam.description = payload.description
     exam.is_published = payload.is_published
     exam.duration_minutes = payload.duration_minutes
+    exam.tags_json = json_dumps(payload.tags or [])
     if payload.access_password is not None:
         if payload.access_password.strip() == "":
             exam.access_password_hash = None

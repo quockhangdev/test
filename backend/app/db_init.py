@@ -21,6 +21,7 @@ def main():
         # lightweight migrations for existing sqlite db
         _sqlite_add_column_if_missing("exams", "duration_minutes", "INTEGER")
         _sqlite_add_column_if_missing("exams", "access_password_hash", "VARCHAR(255)")
+        _sqlite_add_column_if_missing("exams", "tags_json", "TEXT")
         _sqlite_add_column_if_missing("attempts", "expires_at", "DATETIME")
         db.session.commit()
     print("DB initialized.")

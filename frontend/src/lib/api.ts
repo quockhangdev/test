@@ -47,7 +47,7 @@ export const api = {
     }),
 
   listExams: (token: string) =>
-    request<Array<{ id: number; title: string; description: string | null; duration_minutes: number | null; requires_password: boolean }>>(
+    request<Array<{ id: number; title: string; description: string | null; duration_minutes: number | null; requires_password: boolean; tags: string[]; is_favorite: boolean }>>(
       "/exams",
       {
       headers: authHeader(token)
@@ -61,6 +61,7 @@ export const api = {
       description: string | null;
       duration_minutes: number | null;
       requires_password: boolean;
+      tags: string[];
       questions: Array<
         | {
             id: number;
@@ -113,6 +114,11 @@ export const api = {
   getAttempt: (token: string, attemptId: number) =>
     request<any>(`/attempts/${attemptId}`, { headers: authHeader(token) }),
 
+  favoriteExam: (token: string, examId: number) =>
+    request<{ ok: boolean; is_favorite: boolean }>(`/exams/${examId}/favorite`, { method: "POST", headers: authHeader(token) }),
+  unfavoriteExam: (token: string, examId: number) =>
+    request<{ ok: boolean; is_favorite: boolean }>(`/exams/${examId}/favorite`, { method: "DELETE", headers: authHeader(token) }),
+
   admin: {
     listExams: (token: string) =>
       request<
@@ -123,6 +129,7 @@ export const api = {
           is_published: boolean;
           duration_minutes: number | null;
           requires_password: boolean;
+          tags: string[];
         }>
       >(
         "/admin/exams",
@@ -130,7 +137,7 @@ export const api = {
       ),
     createExam: (
       token: string,
-      body: { title: string; description?: string | null; is_published?: boolean; duration_minutes?: number | null; access_password?: string | null }
+      body: { title: string; description?: string | null; is_published?: boolean; duration_minutes?: number | null; access_password?: string | null; tags?: string[] }
     ) =>
       request<{ id: number }>("/admin/exams", {
         method: "POST",
@@ -140,7 +147,7 @@ export const api = {
     updateExam: (
       token: string,
       examId: number,
-      body: { title: string; description?: string | null; is_published?: boolean; duration_minutes?: number | null; access_password?: string | null }
+      body: { title: string; description?: string | null; is_published?: boolean; duration_minutes?: number | null; access_password?: string | null; tags?: string[] }
     ) =>
       request<{ ok: boolean }>(`/admin/exams/${examId}`, {
         method: "PUT",

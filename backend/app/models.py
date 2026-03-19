@@ -45,6 +45,8 @@ class Exam(db.Model):
     duration_minutes = db.Column(db.Integer, nullable=True)
     # null => không có password
     access_password_hash = db.Column(db.String(255), nullable=True)
+    # tags list as JSON string
+    tags_json = db.Column(db.Text, nullable=False, default="[]")
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
@@ -53,6 +55,20 @@ class Exam(db.Model):
     questions = db.relationship(
         "Question", backref="exam", lazy=True, cascade="all, delete-orphan"
     )
+
+
+class Favorite(db.Model):
+    __tablename__ = "favorites"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    exam_id = db.Column(db.Integer, db.ForeignKey("exams.id"), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("user_id", "exam_id", name="uq_fav_user_exam"),)
+
+    user = db.relationship("User", backref="favorites")
+    exam = db.relationship("Exam", backref="favorites")
 
 
 class Question(db.Model):
