@@ -183,7 +183,7 @@ export default function Home() {
         ))}
         {exams && exams.length === 0 && (
           <Grid item xs={12}>
-            <Alert severity="info">Chưa có đề nào được publish.</Alert>
+            <Alert severity="info">Chưa có đề.</Alert>
           </Grid>
         )}
         {!exams && (

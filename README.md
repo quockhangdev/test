@@ -50,8 +50,10 @@ Frontend chạy tại `http://127.0.0.1:5173`.
   - **Đúng/Sai nhiều ý**: một phát biểu + các ý A/B/C/D/E/F (mỗi ý đúng/sai)
 - Bài thi có 2 phần:
   - **Phần 1**: trắc nghiệm
-  - **Phần 2**: học sinh chọn đúng **1 trong 2 định hướng**:
-    - 2.1 Tin học ứng dụng
-    - 2.2 Khoa học máy tính
+  - **Phần 2** gồm:
+    - **2.1 Câu hỏi chung** (không theo định hướng)
+    - **2.2 Câu hỏi theo chủ đề** (học sinh chọn đúng 1 trong 2 định hướng)
+      - Tin học ứng dụng
+      - Khoa học máy tính
 - Nội dung câu hỏi hỗ trợ render **HTML** và code (**C++**, **SQL**) (có highlight).
 

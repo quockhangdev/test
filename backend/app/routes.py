@@ -485,9 +485,22 @@ def admin_delete_exam(exam_id: int):
     exam = Exam.query.get(exam_id)
     if not exam:
         return jsonify({"error": "not_found"}), 404
-    db.session.delete(exam)
-    db.session.commit()
-    return jsonify({"ok": True})
+
+    # If DB enforces FK constraints, deleting exam can fail when there are related rows
+    # (e.g. attempts / favorites). We delete dependents explicitly first.
+    try:
+        Attempt.query.filter_by(exam_id=exam_id).delete(synchronize_session=False)
+        Favorite.query.filter_by(exam_id=exam_id).delete(synchronize_session=False)
+        Question.query.filter_by(exam_id=exam_id).delete(synchronize_session=False)
+        # Ensure dependent deletes are applied before deleting parent (helps with FK enforcement)
+        db.session.flush()
+        db.session.delete(exam)
+        db.session.flush()
+        db.session.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "delete_failed", "details": str(e)}), 500
 
 
 @api_bp.get("/admin/exams/<int:exam_id>/questions")
@@ -535,9 +548,10 @@ def admin_create_question(exam_id: int):
 
     if payload.part == 1 and payload.track is not None:
         return jsonify({"error": "part1_track_must_be_null"}), 400
-    if payload.part == 2 and payload.track is None:
-        return jsonify({"error": "part2_track_required"}), 400
-    if payload.part == 2 and payload.track not in (Track.APP.value, Track.CS.value):
+    # part 2 can be either:
+    # - 2.1: track = None (câu hỏi chung)
+    # - 2.2: track = app/cs (câu hỏi theo chủ đề)
+    if payload.part == 2 and payload.track is not None and payload.track not in (Track.APP.value, Track.CS.value):
         return jsonify({"error": "invalid_track"}), 400
 
     if payload.qtype == "mcq":
@@ -587,8 +601,11 @@ def admin_update_question(question_id: int):
 
     if payload.part == 1 and payload.track is not None:
         return jsonify({"error": "part1_track_must_be_null"}), 400
-    if payload.part == 2 and payload.track is None:
-        return jsonify({"error": "part2_track_required"}), 400
+    # part 2 can be either:
+    # - 2.1: track = None (câu hỏi chung)
+    # - 2.2: track = app/cs (câu hỏi theo chủ đề)
+    if payload.part == 2 and payload.track is not None and payload.track not in (Track.APP.value, Track.CS.value):
+        return jsonify({"error": "invalid_track"}), 400
 
     if payload.qtype == "mcq":
         options = [o.model_dump() for o in payload.options]

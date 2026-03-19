@@ -155,23 +155,33 @@ export default function TakeExam() {
     };
   }, [token, examId]);
 
-  const { part1, part2app, part2cs } = useMemo(() => {
+  const { part1, part2Common, part2app, part2cs } = useMemo(() => {
     const p1: Q[] = [];
+    const p2common: Q[] = [];
     const p2a: Q[] = [];
     const p2c: Q[] = [];
     for (const q of questions) {
-      if (q.part === 1) p1.push(q);
-      else if (q.track === "app") p2a.push(q);
+      if (q.part === 1) {
+        p1.push(q);
+        continue;
+      }
+      if (q.part === 2 && q.track === null) {
+        // part 2.1: câu hỏi chung
+        p2common.push(q);
+        continue;
+      }
+      // part 2.2: câu hỏi theo chủ đề
+      if (q.track === "app") p2a.push(q);
       else if (q.track === "cs") p2c.push(q);
     }
-    return { part1: p1, part2app: p2a, part2cs: p2c };
+    return { part1: p1, part2Common: p2common, part2app: p2a, part2cs: p2c };
   }, [questions]);
 
   const part2List = track === "app" ? part2app : track === "cs" ? part2cs : [];
 
   const visibleQuestions = useMemo(() => {
-    return [...part1, ...(track ? part2List : [])];
-  }, [part1, part2List, track]);
+    return [...part1, ...part2Common, ...(track ? part2List : [])];
+  }, [part1, part2Common, part2List, track]);
 
   useEffect(() => {
     // reset index when question set changes
@@ -517,8 +527,8 @@ export default function TakeExam() {
                   <MenuItem value="">
                     <em>-- Chọn định hướng --</em>
                   </MenuItem>
-                  <MenuItem value="app">2.1. Tin học ứng dụng</MenuItem>
-                  <MenuItem value="cs">2.2. Khoa học máy tính</MenuItem>
+                  <MenuItem value="app">Tin học ứng dụng</MenuItem>
+                  <MenuItem value="cs">Khoa học máy tính</MenuItem>
                 </Select>
               </FormControl>
               {track && (
@@ -651,8 +661,12 @@ export default function TakeExam() {
                           {activeQ ? (
                             <>
                               Câu {activeNumber}/{visibleQuestions.length} •{" "}
-                              {activeQ.part === 1 ? "Phần 1" : `Phần 2 (${trackLabel(activeQ.track)})`} •{" "}
-                              {activeQ.qtype}
+                              {activeQ.part === 1
+                                ? "Phần 1"
+                                : activeQ.track === null
+                                  ? "Phần 2.1"
+                                  : `Phần 2.2 (${trackLabel(activeQ.track)})`}{" "}
+                              • {activeQ.qtype}
                             </>
                           ) : null}
                         </Typography>

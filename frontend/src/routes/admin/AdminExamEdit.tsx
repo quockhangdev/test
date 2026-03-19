@@ -57,6 +57,8 @@ type QuestionRow = any;
 
 const LABELS = ["A", "B", "C", "D", "E", "F"];
 
+type Section = "1" | "2.1" | "2.2";
+
 function trackLabel(t: any): string {
   if (t === "app") return "Tin học ứng dụng";
   if (t === "cs") return "Khoa học máy tính";
@@ -97,36 +99,44 @@ export default function AdminExamEdit() {
   const [tagsText, setTagsText] = useState<string>("");
 
   // question builder
-  const [part, setPart] = useState<1 | 2>(1);
+  const [section, setSection] = useState<Section>("1");
   const [track, setTrack] = useState<"app" | "cs">("app");
   const [qtype, setQtype] = useState<"mcq" | "tf_multi">("mcq");
   const [order, setOrder] = useState(0);
   const [points, setPoints] = useState(1);
-  const [promptHtml, setPromptHtml] = useState("<p>Nội dung câu hỏi...</p>");
+  const [promptHtml, setPromptHtml] = useState("Nội dung câu hỏi...");
   const [explainHtml, setExplainHtml] = useState<string>("");
 
-  const [mcqOpts, setMcqOpts] = useState(() => LABELS.slice(0, 4).map((l) => ({ label: l, text_html: `<p>Đáp án ${l}</p>` })));
+  const [mcqOpts, setMcqOpts] = useState(() => LABELS.slice(0, 4).map((l) => ({ label: l, text_html: `Đáp án ${l}` })));
   const [mcqCorrect, setMcqCorrect] = useState(0);
 
   const [tfItems, setTfItems] = useState(() =>
-    LABELS.slice(0, 4).map((l) => ({ label: l, text_html: `<p>Ý ${l}</p>`, is_true: l === "A" }))
+    LABELS.slice(0, 4).map((l) => ({ label: l, text_html: `Ý ${l}`, is_true: l === "A" }))
   );
 
   function resetQuestionBuilder() {
-    setPart(1);
+    setSection("1");
     setTrack("app");
     setQtype("mcq");
     setOrder(0);
     setPoints(1);
-    setPromptHtml("<p>Nội dung câu hỏi...</p>");
+    setPromptHtml("Nội dung câu hỏi...");
     setExplainHtml("");
-    setMcqOpts(LABELS.slice(0, 4).map((l) => ({ label: l, text_html: `<p>Đáp án ${l}</p>` })));
+    setMcqOpts(LABELS.slice(0, 4).map((l) => ({ label: l, text_html: `Đáp án ${l}` })));
     setMcqCorrect(0);
-    setTfItems(LABELS.slice(0, 4).map((l) => ({ label: l, text_html: `<p>Ý ${l}</p>`, is_true: l === "A" })));
+    setTfItems(LABELS.slice(0, 4).map((l) => ({ label: l, text_html: `Ý ${l}`, is_true: l === "A" })));
   }
 
   function loadQuestionIntoBuilder(q: any) {
-    setPart(q.part);
+    if (q.part === 1) {
+      setSection("1");
+    } else if (q.part === 2 && !q.track) {
+      // part 2.1: chung
+      setSection("2.1");
+    } else {
+      // part 2.2: theo chủ đề
+      setSection("2.2");
+    }
     setTrack((q.track || "app") as "app" | "cs");
     setQtype(q.qtype);
     setOrder(Number(q.order_in_exam || 0));
@@ -192,10 +202,12 @@ export default function AdminExamEdit() {
   }, [token, examId]);
 
   const previewPayload = useMemo(() => {
+    const payloadPart: 1 | 2 = section === "1" ? 1 : 2;
+    const payloadTrack: "app" | "cs" | null = section === "2.2" ? track : null;
     if (qtype === "mcq") {
       return {
-        part,
-        track: part === 2 ? track : null,
+        part: payloadPart,
+        track: payloadTrack,
         qtype,
         prompt_html: promptHtml,
         explanation_html: explainHtml || null,
@@ -206,8 +218,8 @@ export default function AdminExamEdit() {
       };
     }
     return {
-      part,
-      track: part === 2 ? track : null,
+      part: payloadPart,
+      track: payloadTrack,
       qtype,
       prompt_html: promptHtml,
       explanation_html: explainHtml || null,
@@ -215,7 +227,37 @@ export default function AdminExamEdit() {
       order_in_exam: order,
       items: tfItems
     };
-  }, [qtype, part, track, promptHtml, explainHtml, points, order, mcqOpts, mcqCorrect, tfItems]);
+  }, [qtype, section, track, promptHtml, explainHtml, points, order, mcqOpts, mcqCorrect, tfItems]);
+
+  function getNextOrderForBuilder(nextSection: Section, nextTrack: "app" | "cs") {
+    const payloadPart: 1 | 2 = nextSection === "1" ? 1 : 2;
+    const payloadTrack: "app" | "cs" | null = nextSection === "2.2" ? nextTrack : null;
+    const rows = (questions || []).filter((q) => {
+      if (Number(q.part) !== payloadPart) return false;
+      // part 1 / 2.1: track phải là null (hoặc không tồn tại)
+      if (payloadTrack === null) return !q.track;
+      return q.track === payloadTrack;
+    });
+    let max = -1;
+    for (const r of rows) {
+      const n = Number(r.order_in_exam);
+      if (Number.isFinite(n) && n > max) max = n;
+    }
+    return max + 1;
+  }
+
+  // Auto-increase order for newly created questions.
+  // The backend enforces uniqueness on (exam_id, part, track, order_in_exam),
+  // so we must not reuse the same order within the same section/topic.
+  useEffect(() => {
+    if (!openAddQuestion) return;
+    if (editingQuestionId) return; // editing existing -> keep current order
+    // If questions are not loaded yet, keep current value.
+    if (!questions) return;
+
+    setOrder(getNextOrderForBuilder(section, track));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openAddQuestion, editingQuestionId, section, track, questions]);
 
   const filteredAttempts = useMemo(() => {
     const rows = attempts || [];
@@ -362,7 +404,12 @@ export default function AdminExamEdit() {
               sx={{ border: 1, borderColor: "divider", borderRadius: 2, "&:before": { display: "none" } }}
             >
               <AccordionSummary expandIcon={<ExpandMoreOutlinedIcon />}>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  alignItems="center"
+                  sx={{ minWidth: 0, flexWrap: "wrap", rowGap: 0.5 }}
+                >
                   <Typography fontWeight={800} noWrap>
                     Thông tin đề
                   </Typography>
@@ -387,7 +434,7 @@ export default function AdminExamEdit() {
               </AccordionSummary>
               <AccordionDetails>
                 <Grid container spacing={1.5} alignItems="center">
-                  <Grid item xs={12} md={5}>
+                  <Grid item xs={12} md={6}>
                     <TextField
                       size="small"
                       label="Tiêu đề"
@@ -396,22 +443,13 @@ export default function AdminExamEdit() {
                       fullWidth
                     />
                   </Grid>
-                  <Grid item xs={12} md={5}>
-                    <TextField
-                      size="small"
-                      label="Mô tả"
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      fullWidth
-                    />
-                  </Grid>
-                  <Grid item xs={12} md={2}>
+                  <Grid item xs={12} md={3}>
                     <FormControlLabel
                       control={<Checkbox checked={published} onChange={(e) => setPublished(e.target.checked)} />}
-                      label="Publish"
+                      label="Published"
                     />
                   </Grid>
-                  <Grid item xs={12} md={4}>
+                  <Grid item xs={12} md={3}>
                     <TextField
                       size="small"
                       label="Thời gian làm bài (phút)"
@@ -422,7 +460,18 @@ export default function AdminExamEdit() {
                       fullWidth
                     />
                   </Grid>
-                  <Grid item xs={12} md={8}>
+
+                  <Grid item xs={12}>
+                    <TextField
+                      size="small"
+                      label="Mô tả"
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      fullWidth
+                    />
+                  </Grid>
+
+                  <Grid item xs={12} md={6}>
                     <TextField
                       size="small"
                       label="Tags (phân tách bằng dấu phẩy)"
@@ -432,7 +481,8 @@ export default function AdminExamEdit() {
                       fullWidth
                     />
                   </Grid>
-                  <Grid item xs={12} md={8}>
+
+                  <Grid item xs={12} md={6}>
                     <TextField
                       size="small"
                       label="Password đề"
@@ -538,10 +588,14 @@ export default function AdminExamEdit() {
                       <TableRow key={q.id} hover>
                         <TableCell>{q.id}</TableCell>
                         <TableCell>
-                          <Chip label={q.part} size="small" variant="outlined" />
+                          <Chip
+                            label={q.part === 1 ? "1" : q.track ? "2.2" : "2.1"}
+                            size="small"
+                            variant="outlined"
+                          />
                         </TableCell>
                         <TableCell>
-                          {q.part === 2 ? <Chip label={q.track} size="small" variant="outlined" /> : "—"}
+                          {q.part === 2 && q.track ? <Chip label={q.track} size="small" variant="outlined" /> : "—"}
                         </TableCell>
                         <TableCell>
                           <Chip label={q.qtype} size="small" variant="outlined" />
@@ -649,16 +703,22 @@ export default function AdminExamEdit() {
                 <Stack direction={{ xs: "column", md: "row" }} spacing={1.5}>
                   <FormControl fullWidth size="small">
                     <InputLabel id="part-label">Phần</InputLabel>
-                    <Select labelId="part-label" label="Phần" value={part} onChange={(e) => setPart(Number(e.target.value) as 1 | 2)}>
-                      <MenuItem value={1}>Phần 1</MenuItem>
-                      <MenuItem value={2}>Phần 2</MenuItem>
+                    <Select
+                      labelId="part-label"
+                      label="Phần"
+                      value={section}
+                      onChange={(e) => setSection(e.target.value as Section)}
+                    >
+                      <MenuItem value={"1"}>Phần 1</MenuItem>
+                      <MenuItem value={"2.1"}>Phần 2.1 - Câu hỏi chung</MenuItem>
+                      <MenuItem value={"2.2"}>Phần 2.2 - Câu hỏi theo chủ đề</MenuItem>
                     </Select>
                   </FormControl>
-                  <FormControl fullWidth size="small" disabled={part !== 2}>
+                  <FormControl fullWidth size="small" disabled={section !== "2.2"}>
                     <InputLabel id="track-label">Định hướng</InputLabel>
                     <Select labelId="track-label" label="Định hướng" value={track} onChange={(e) => setTrack(e.target.value as any)}>
-                      <MenuItem value="app">Ứng dụng</MenuItem>
-                      <MenuItem value="cs">KHMT</MenuItem>
+                      <MenuItem value="app">Tin học ứng dụng</MenuItem>
+                      <MenuItem value="cs">Khoa học máy tính</MenuItem>
                     </Select>
                   </FormControl>
                 </Stack>
@@ -676,12 +736,12 @@ export default function AdminExamEdit() {
                 </Stack>
 
                 <TextField
-                  label="Prompt (HTML)"
+                  label="Nội dung câu hỏi"
                   value={promptHtml}
                   onChange={(e) => setPromptHtml(e.target.value)}
                   multiline
                   minRows={4}
-                  helperText='Gợi ý: dùng <pre><code class="language-cpp">...</code></pre> hoặc language-sql'
+                  helperText='Gợi ý: dùng <pre><code class="language-cpp">...</code></pre>, <pre><code class="language-sql">...</code></pre> hoặc <pre><code class="language-python">...</code></pre>'
                 />
 
                 {qtype === "mcq" ? (
@@ -709,7 +769,7 @@ export default function AdminExamEdit() {
                                 <FormControlLabel value={i} control={<Radio size="small" />} label="Đáp án đúng" />
                               </Stack>
                               <TextField
-                                label={`Nội dung ${o.label} (HTML)`}
+                                label={`Nội dung ${o.label}`}
                                 value={o.text_html}
                                 onChange={(e) =>
                                   setMcqOpts((arr) => arr.map((x, idx) => (idx === i ? { ...x, text_html: e.target.value } : x)))
@@ -773,7 +833,7 @@ export default function AdminExamEdit() {
                 )}
 
                 <TextField
-                  label="Giải thích (HTML, optional)"
+                  label="Giải thích"
                   value={explainHtml}
                   onChange={(e) => setExplainHtml(e.target.value)}
                   multiline
@@ -903,10 +963,10 @@ export default function AdminExamEdit() {
                 <Grid item xs={12} md={3}>
                   <TextField size="small" label="Tìm (email / tên)" value={filterQuery} onChange={(e) => setFilterQuery(e.target.value)} fullWidth />
                 </Grid>
-                <Grid item xs={12} md={2.5}>
+                <Grid item xs={12} md={2}>
                   <TextField size="small" label="Từ ngày" type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} fullWidth InputLabelProps={{ shrink: true }} />
                 </Grid>
-                <Grid item xs={12} md={2.5}>
+                <Grid item xs={12} md={3}>
                   <TextField size="small" label="Đến ngày" type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} fullWidth InputLabelProps={{ shrink: true }} />
                 </Grid>
               </Grid>
