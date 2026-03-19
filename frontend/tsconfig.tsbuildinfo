@@ -1,0 +1,1 @@
+{"root":["./src/main.tsx","./src/theme.ts","./src/components/safehtml.tsx","./src/lib/api.ts","./src/lib/auth.tsx","./src/routes/admin.tsx","./src/routes/app.tsx","./src/routes/home.tsx","./src/routes/login.tsx","./src/routes/register.tsx","./src/routes/takeexam.tsx","./src/routes/admin/adminexamedit.tsx","./src/routes/admin/adminexams.tsx"],"version":"5.9.3"}

@@ -1,0 +1,9 @@
+/* Keep only minimal styles that complement MUI */
+pre code {
+  display: block;
+  overflow-x: auto;
+}
+.hljs {
+  border-radius: 12px;
+}
+
