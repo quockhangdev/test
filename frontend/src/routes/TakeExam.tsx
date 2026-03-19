@@ -194,8 +194,17 @@ export default function TakeExam() {
   function isAnswered(q: Q): boolean {
     const v = answers[String(q.id)];
     if (!v) return false;
-    if (q.qtype === "mcq") return Number.isFinite(v.choiceIndex);
-    if (q.qtype === "tf_multi") return v?.items && Object.keys(v.items).length > 0;
+    if (q.qtype === "mcq") {
+      const idx = (v as any).choiceIndex;
+      if (!Number.isFinite(idx)) return false;
+      return idx >= 0 && idx < q.options.length;
+    }
+    if (q.qtype === "tf_multi") {
+      const itemsAns = (v as any).items;
+      if (!itemsAns || typeof itemsAns !== "object") return false;
+      // Mark as done only when user has decided for all statements.
+      return q.items.every((it) => Object.prototype.hasOwnProperty.call(itemsAns, it.label));
+    }
     return false;
   }
 
@@ -601,7 +610,9 @@ export default function TakeExam() {
             ) : visibleQuestions.length === 0 ? (
               <Alert severity="info">Chưa có câu hỏi cho đề này.</Alert>
             ) : (
-              <Grid container>
+              <Grid container spacing={
+                {xs: 0.5, md: 2, lg: 3}
+              }>
                 <Grid item xs={12} md={3} lg={2.5}>
                   <Card variant="outlined">
                     <CardContent sx={{ p: 1.25 }}>
@@ -630,7 +641,23 @@ export default function TakeExam() {
                               key={q.id}
                               value={String(idx)}
                               size="small"
-                              sx={{ minWidth: 38, px: 0.5, py: 0.25 }}
+                              sx={{
+                                minWidth: 38,
+                                px: 0.5,
+                                py: 0.25,
+                                ...(isAnswered(q)
+                                  ? {
+                                      bgcolor: idx === activeIdx ? "success.main" : "success.light",
+                                      color: idx === activeIdx ? "success.contrastText" : "success.main",
+                                      border: idx === activeIdx ? "1px solid" : "2px solid",
+                                      borderColor: "success.main",
+                                      "&:hover": {
+                                        bgcolor: idx === activeIdx ? "success.dark" : "success.main",
+                                        borderColor: "success.dark"
+                                      }
+                                    }
+                                  : null)
+                              }}
                               color={isAnswered(q) ? "success" : "primary"}
                             >
                               {idx + 1}
@@ -665,8 +692,7 @@ export default function TakeExam() {
                                 ? "Phần 1"
                                 : activeQ.track === null
                                   ? "Phần 2.1"
-                                  : `Phần 2.2 (${trackLabel(activeQ.track)})`}{" "}
-                              • {activeQ.qtype}
+                                  : `Phần 2.2 - ${trackLabel(activeQ.track)}`}
                             </>
                           ) : null}
                         </Typography>

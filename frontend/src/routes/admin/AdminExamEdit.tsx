@@ -683,20 +683,20 @@ export default function AdminExamEdit() {
       <Dialog
         open={openAddQuestion}
         onClose={() => setOpenAddQuestion(false)}
-        fullWidth
-        maxWidth="lg"
+        fullScreen
+        scroll="paper"
       >
-        <DialogTitle>
-          <Stack direction="row" alignItems="center" justifyContent="space-between">
-            <Typography fontWeight={800}>
+        <DialogTitle sx={{ py: 0.75, px: { xs: 1, sm: 2 } }}>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ minWidth: 0 }}>
+            <Typography variant="subtitle1" fontWeight={800} noWrap>
               {editingQuestionId ? `Sửa câu hỏi #${editingQuestionId}` : "Thêm câu hỏi"}
             </Typography>
-            <IconButton onClick={() => setOpenAddQuestion(false)}>
+            <IconButton size="small" onClick={() => setOpenAddQuestion(false)}>
               <CloseOutlinedIcon />
             </IconButton>
           </Stack>
         </DialogTitle>
-        <DialogContent dividers>
+        <DialogContent dividers sx={{ flex: 1, overflowY: "auto" }}>
           <Grid container spacing={2}>
             <Grid item xs={12} md={7}>
               <Stack spacing={2}>
