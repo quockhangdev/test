@@ -28,6 +28,8 @@ import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import CheckOutlinedIcon from "@mui/icons-material/CheckOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined";
+import PeopleOutlineOutlinedIcon from "@mui/icons-material/PeopleOutlineOutlined";
+import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 
@@ -72,17 +74,26 @@ export default function AdminExams() {
         <Typography variant="h6" fontWeight={800}>
           Đề thi
         </Typography>
-        <Button variant="contained" onClick={() => setOpenCreate(true)} startIcon={<AddOutlinedIcon />}>
-          Tạo đề mới
-        </Button>
+        <Stack direction="row" spacing={1}>
+          <Tooltip title="Trang Admin">
+            <IconButton component={Link} to="/admin" size="small">
+              <DashboardOutlinedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Người dùng">
+            <IconButton component={Link} to="/admin/users" size="small">
+              <PeopleOutlineOutlinedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Button variant="contained" onClick={() => setOpenCreate(true)} startIcon={<AddOutlinedIcon />}>
+            Tạo đề mới
+          </Button>
+        </Stack>
       </Stack>
 
       <Card>
         <CardContent>
           <Stack spacing={2}>
-            <Typography variant="h6" fontWeight={800}>
-              Danh sách đề
-            </Typography>
             {err && <Alert severity="error">{err}</Alert>}
             {!list ? (
               <Typography color="text.secondary">Đang tải...</Typography>

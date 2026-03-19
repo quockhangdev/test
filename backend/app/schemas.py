@@ -61,3 +61,10 @@ class AttemptStartIn(BaseModel):
 class AttemptSubmitIn(BaseModel):
     answers: dict[str, Any]
 
+
+class AdminUserUpdateIn(BaseModel):
+    full_name: str | None = Field(default=None, max_length=255)
+    role: Literal["admin", "student"] | None = None
+    # nếu gửi password => reset password user
+    password: str | None = Field(default=None, min_length=6, max_length=200)
+

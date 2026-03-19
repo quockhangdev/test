@@ -145,7 +145,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       <Box component="footer" sx={{ py: 2, bgcolor: "background.paper" }}>
         <Container maxWidth="lg">
           <Typography variant="body2" color="text.secondary">
-            © 2026
+          Ôn thi Tin học Trung học Phổ thông Quốc gia © 2026
           </Typography>
         </Container>
       </Box>

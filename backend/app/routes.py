@@ -15,6 +15,7 @@ from .models import Attempt, Exam, Question, Role, Track, User
 from .schemas import (
     AttemptStartIn,
     AttemptSubmitIn,
+    AdminUserUpdateIn,
     ExamUpsertIn,
     LoginIn,
     QuestionUpsertIn,
@@ -614,4 +615,81 @@ def admin_get_attempt_detail(attempt_id: int):
         return jsonify({**_attempt_public_row(a), "submitted": False}), 200
     u = User.query.get(a.user_id)
     return jsonify({**_attempt_review_payload(a), "submitted": True, "user": {"id": u.id, "email": u.email, "full_name": u.full_name} if u else None})
+
+
+# -------------------- Admin: Users --------------------
+
+
+def _user_public_row(u: User):
+    return {
+        "id": u.id,
+        "email": u.email,
+        "full_name": u.full_name,
+        "role": u.role,
+        "created_at": u.created_at.isoformat() + "Z" if u.created_at else None,
+    }
+
+
+@api_bp.get("/admin/users")
+@require_role(Role.ADMIN.value)
+def admin_list_users():
+    q = (request.args.get("q") or "").strip().lower()
+    query = User.query
+    if q:
+        like = f"%{q}%"
+        query = query.filter((User.email.ilike(like)) | (User.full_name.ilike(like)))
+    rows = query.order_by(User.created_at.desc()).all()
+    return jsonify([_user_public_row(u) for u in rows])
+
+
+@api_bp.patch("/admin/users/<int:user_id>")
+@require_role(Role.ADMIN.value)
+def admin_update_user(user_id: int):
+    payload = _pydantic(AdminUserUpdateIn)
+    if isinstance(payload, tuple):
+        return payload
+
+    uid = int(get_jwt_identity())
+    target = User.query.get(user_id)
+    if not target:
+        return jsonify({"error": "not_found"}), 404
+
+    if payload.role is not None and target.id == uid and payload.role != Role.ADMIN.value:
+        return jsonify({"error": "cannot_demote_self"}), 400
+
+    if payload.role is not None and target.role == Role.ADMIN.value and payload.role != Role.ADMIN.value:
+        admins = User.query.filter_by(role=Role.ADMIN.value).count()
+        if admins <= 1:
+            return jsonify({"error": "cannot_remove_last_admin"}), 400
+        target.role = payload.role
+
+    if payload.full_name is not None:
+        target.full_name = payload.full_name
+
+    if payload.password is not None:
+        target.password_hash = hash_password(payload.password)
+
+    db.session.commit()
+    return jsonify({"ok": True, "user": _user_public_row(target)})
+
+
+@api_bp.delete("/admin/users/<int:user_id>")
+@require_role(Role.ADMIN.value)
+def admin_delete_user(user_id: int):
+    uid = int(get_jwt_identity())
+    if user_id == uid:
+        return jsonify({"error": "cannot_delete_self"}), 400
+
+    u = User.query.get(user_id)
+    if not u:
+        return jsonify({"error": "not_found"}), 404
+
+    if u.role == Role.ADMIN.value:
+        admins = User.query.filter_by(role=Role.ADMIN.value).count()
+        if admins <= 1:
+            return jsonify({"error": "cannot_delete_last_admin"}), 400
+
+    db.session.delete(u)
+    db.session.commit()
+    return jsonify({"ok": True})
 

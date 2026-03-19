@@ -1,18 +1,25 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { Alert, Box, Button, Card, CardContent, Stack, TextField, Typography } from "@mui/material";
 import LoginOutlinedIcon from "@mui/icons-material/LoginOutlined";
 import PersonAddAltOutlinedIcon from "@mui/icons-material/PersonAddAltOutlined";
 import { api } from "../lib/api";
+import { useAuth } from "../lib/auth";
 
 export default function Register() {
+  const { user, loading } = useAuth();
   const nav = useNavigate();
+  const loc = useLocation() as any;
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  if (!loading && user) {
+    return <Navigate to={loc?.state?.from || "/"} replace />;
+  }
 
   return (
     <Box sx={{ display: "flex", justifyContent: "center" }}>

@@ -69,6 +69,21 @@ function trackLabel(t: "app" | "cs" | null | undefined): string {
   return "—";
 }
 
+function formatErrMessage(code: string): { severity: "error" | "warning"; text: string } {
+  switch (code) {
+    case "exam_password_required":
+      return { severity: "warning", text: "Đề này có mật khẩu. Vui lòng nhập mật khẩu để bắt đầu." };
+    case "exam_password_invalid":
+      return { severity: "error", text: "Mật khẩu đề không đúng. Vui lòng kiểm tra và nhập lại." };
+    case "missing_track":
+      return { severity: "warning", text: "Vui lòng chọn định hướng (Tin học ứng dụng / Khoa học máy tính)." };
+    case "time_up":
+      return { severity: "warning", text: "Hết giờ làm bài. Bạn có thể bấm Bắt đầu để làm lại (tạo lượt mới)." };
+    default:
+      return { severity: "error", text: code };
+  }
+}
+
 export default function TakeExam() {
   const { examId } = useParams();
   const { token, user } = useAuth();
@@ -345,6 +360,8 @@ export default function TakeExam() {
   }
   if (fatalErr) return <Alert severity="error">{fatalErr}</Alert>;
 
+  const errUi = err ? formatErrMessage(err) : null;
+
   return (
     <Stack spacing={2}>
       <Dialog
@@ -452,8 +469,8 @@ export default function TakeExam() {
             <Divider />
             <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems={{ xs: "stretch", md: "center" }}>
               {err && (
-                <Alert severity={err === "time_up" ? "warning" : "error"} sx={{ flex: 1 }}>
-                  {err === "time_up" ? "Hết giờ làm bài. Bạn có thể bấm Bắt đầu để làm lại (tạo lượt mới)." : err}
+                <Alert severity={errUi!.severity} sx={{ flex: 1 }}>
+                  {errUi!.text}
                 </Alert>
               )}
               <Chip
@@ -660,45 +677,47 @@ export default function TakeExam() {
 
       {/* Part 2 is integrated into single-question mode via navigation */}
 
-      <Card>
-        <CardContent sx={{ p: { xs: 1.5, md: 2 } }}>
-          <Stack spacing={1}>
-            <Stack direction="row" alignItems="center" justifyContent="space-between">
-              <Box>
-                <Typography fontWeight={800}>Nộp bài</Typography>
-                <Typography color="text.secondary" variant="body2">
-                  Điểm sẽ chấm tự động theo đáp án.
-                </Typography>
-              </Box>
-              <Button
-                variant="contained"
-                disabled={submitting || !track || score !== null || !attemptId}
-                startIcon={<SendOutlinedIcon />}
-                onClick={async () => {
-                  try {
-                    setSubmitting(true);
-                    setErr(null);
-                    const res = await api.submitAttempt(token!, attemptId!, answers);
-                    setScore(res.score);
-                  } catch (e: any) {
-                    setErr(e?.message || "submit_failed");
-                  } finally {
-                    setSubmitting(false);
-                  }
-                }}
-              >
-                {score === null ? (submitting ? "Đang nộp..." : "Nộp bài") : "Đã nộp"}
-              </Button>
-            </Stack>
-            {err && <Alert severity="error">{err}</Alert>}
-            {score !== null && (
-              <Stack direction="row" spacing={1} alignItems="center">
-                <Chip label={`Điểm: ${score.toFixed(2)}`} color="success" variant="outlined" />
+      {started && (
+        <Card>
+          <CardContent sx={{ p: { xs: 1.5, md: 2 } }}>
+            <Stack spacing={1}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                <Box>
+                  <Typography fontWeight={800}>Nộp bài</Typography>
+                  <Typography color="text.secondary" variant="body2">
+                    Điểm sẽ chấm tự động theo đáp án.
+                  </Typography>
+                </Box>
+                <Button
+                  variant="contained"
+                  disabled={submitting || !track || score !== null || !attemptId}
+                  startIcon={<SendOutlinedIcon />}
+                  onClick={async () => {
+                    try {
+                      setSubmitting(true);
+                      setErr(null);
+                      const res = await api.submitAttempt(token!, attemptId!, answers);
+                      setScore(res.score);
+                    } catch (e: any) {
+                      setErr(e?.message || "submit_failed");
+                    } finally {
+                      setSubmitting(false);
+                    }
+                  }}
+                >
+                  {score === null ? (submitting ? "Đang nộp..." : "Nộp bài") : "Đã nộp"}
+                </Button>
               </Stack>
-            )}
-          </Stack>
-        </CardContent>
-      </Card>
+              {err && <Alert severity={errUi!.severity}>{errUi!.text}</Alert>}
+              {score !== null && (
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Chip label={`Điểm: ${score.toFixed(2)}`} color="success" variant="outlined" />
+                </Stack>
+              )}
+            </Stack>
+          </CardContent>
+        </Card>
+      )}
 
       <Dialog open={openHistory} onClose={() => setOpenHistory(false)} fullWidth maxWidth="md">
         <DialogTitle>
@@ -877,28 +896,32 @@ function QuestionView({
           <SafeHtml html={q.prompt_html} />
           <Divider />
           {q.qtype === "mcq" ? (
-            <RadioGroup
-              value={value?.choiceIndex ?? ""}
-              onChange={(_, v) => onChange({ type: "mcq", choiceIndex: Number(v) })}
-            >
-              {q.options.map((opt, i) => (
-                <FormControlLabel
-                  key={opt.label}
-                  value={i}
-                  control={<Radio />}
-                  label={
-                    <Grid container spacing={1} alignItems="flex-start">
-                      <Grid item>
-                        <Chip label={opt.label} size="small" variant="outlined" />
-                      </Grid>
-                      <Grid item xs>
-                        <SafeHtml html={opt.text_html} />
-                      </Grid>
-                    </Grid>
-                  }
-                />
-              ))}
-            </RadioGroup>
+            <Stack spacing={0.75} role="radiogroup" aria-label="Đáp án">
+              {q.options.map((opt, i) => {
+                const checked = value?.choiceIndex === i;
+                return (
+                  <Box
+                    key={opt.label}
+                    onClick={() => onChange({ type: "mcq", choiceIndex: i })}
+                    sx={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: 1,
+                      p: 1,
+                      borderRadius: 2,
+                      cursor: "pointer",
+                      "&:hover": { bgcolor: "action.hover" }
+                    }}
+                  >
+                    <Radio checked={checked} onChange={() => onChange({ type: "mcq", choiceIndex: i })} />
+                    <Chip label={opt.label} size="small" variant="outlined" sx={{ mt: 0.5 }} />
+                    <Box sx={{ flex: 1, minWidth: 0, pt: 0.25 }}>
+                      <SafeHtml html={opt.text_html} />
+                    </Box>
+                  </Box>
+                );
+              })}
+            </Stack>
           ) : (
             <Stack spacing={1}>
               {q.items.map((it) => {
@@ -916,7 +939,7 @@ function QuestionView({
                         <RadioGroup
                           row
                           value={current === true ? "true" : current === false ? "false" : ""}
-                          onChange={(_, v) =>
+                          onChange={(_: React.ChangeEvent<HTMLInputElement>, v: string) =>
                             onChange({
                               type: "tf_multi",
                               items: { ...(value?.items || {}), [it.label]: v === "true" }

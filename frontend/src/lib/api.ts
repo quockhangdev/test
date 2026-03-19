@@ -177,7 +177,28 @@ export const api = {
       return request<any[]>(`/admin/attempts${suffix}`, { headers: authHeader(token) });
     },
     getAttempt: (token: string, attemptId: number) =>
-      request<any>(`/admin/attempts/${attemptId}`, { headers: authHeader(token) })
+      request<any>(`/admin/attempts/${attemptId}`, { headers: authHeader(token) }),
+
+    listUsers: (token: string, params: { q?: string } = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set("q", params.q);
+      const suffix = qs.toString() ? `?${qs.toString()}` : "";
+      return request<Array<{ id: number; email: string; full_name: string | null; role: "admin" | "student"; created_at: string | null }>>(
+        `/admin/users${suffix}`,
+        { headers: authHeader(token) }
+      );
+    },
+    updateUser: (
+      token: string,
+      userId: number,
+      body: { full_name?: string | null; role?: "admin" | "student" | null; password?: string | null }
+    ) =>
+      request<{ ok: boolean; user: { id: number; email: string; full_name: string | null; role: "admin" | "student"; created_at: string | null } }>(
+        `/admin/users/${userId}`,
+        { method: "PATCH", headers: authHeader(token), body: JSON.stringify(body) }
+      ),
+    deleteUser: (token: string, userId: number) =>
+      request<{ ok: boolean }>(`/admin/users/${userId}`, { method: "DELETE", headers: authHeader(token) }),
   }
 };
 

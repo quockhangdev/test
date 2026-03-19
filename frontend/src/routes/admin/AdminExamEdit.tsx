@@ -285,7 +285,7 @@ export default function AdminExamEdit() {
         <CardContent>
           <Stack direction="row" alignItems="center" justifyContent="space-between">
             <Alert severity="error">Không tìm thấy đề.</Alert>
-            <Button component={Link} to="/admin" variant="outlined" startIcon={<ArrowBackOutlinedIcon />}>
+            <Button component={Link} to="/admin/exams" variant="outlined" startIcon={<ArrowBackOutlinedIcon />}>
               Quay lại
             </Button>
           </Stack>
@@ -338,7 +338,7 @@ export default function AdminExamEdit() {
                 >
                   Lịch sử
                 </Button>
-                <Button component={Link} to="/admin" variant="outlined" size="small" startIcon={<ArrowBackOutlinedIcon />}>
+                <Button component={Link} to="/admin/exams" variant="outlined" size="small" startIcon={<ArrowBackOutlinedIcon />}>
                   Quay lại
                 </Button>
               </Stack>
