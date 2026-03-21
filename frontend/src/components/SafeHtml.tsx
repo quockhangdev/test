@@ -2,56 +2,67 @@ import React, { useEffect, useMemo, useRef } from "react";
 import DOMPurify from "dompurify";
 import hljs from "highlight.js";
 import python from "highlight.js/lib/languages/python";
+import MarkdownIt from "markdown-it";
 import "highlight.js/styles/github.css";
 
 // Ensure we highlight Python when user uses `class="language-python"` (or `language-py`).
 hljs.registerLanguage("python", python);
 hljs.registerLanguage("py", python);
 
+const md = new MarkdownIt({
+  html: false, // keep markdown safe; raw html in markdown is escaped
+  linkify: true,
+  breaks: true
+});
+
+const NON_RENDERABLE_TAGS = new Set([
+  "html",
+  "head",
+  "body",
+  "meta",
+  "title",
+  "style",
+  "script",
+  "link"
+]);
+
+function parseTagNames(input: string): string[] {
+  const names: string[] = [];
+  const re = /<\/?\s*([a-zA-Z][\w-]*)\b[^>]*>/g;
+  let m: RegExpExecArray | null = null;
+  while ((m = re.exec(input))) {
+    names.push(String(m[1] || "").toLowerCase());
+  }
+  return names;
+}
+
+function looksLikeRenderableHtml(input: string): boolean {
+  const names = parseTagNames(input);
+  if (names.length === 0) return false;
+  return names.some((n) => !NON_RENDERABLE_TAGS.has(n));
+}
+
 export function SafeHtml({ html }: { html: string }) {
   const ref = useRef<HTMLDivElement | null>(null);
 
-  // If content is not inside `<pre><code>...</code></pre>`, treat it as plain text:
-  // escape `<` and `>` so tags like `<head>...</head>` render as visible text.
-  //
-  // For `<pre><code>` blocks, we also escape angle brackets inside the code body
-  // so users can paste raw HTML snippets without manually converting to `&lt;`/`&gt;`.
-  const normalized = useMemo(() => {
+  const renderedHtml = useMemo(() => {
     const input = String(html || "");
+    if (!input.trim()) return "";
 
-    const escapeAngles = (s: string) => s.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    // Backward compatibility: existing content in DB may be HTML fragments.
+    // For text/markdown inputs (including cases like "Thẻ <head>"), use markdown parser.
+    if (looksLikeRenderableHtml(input)) {
+      return input;
+    }
 
-    const preCodeRegex = /<pre\b[^>]*>\s*<code\b[^>]*>[\s\S]*?<\/code>\s*<\/pre>/gi;
-    const openCloseRegex = /(<pre\b[^>]*>\s*<code\b[^>]*>)([\s\S]*?)(<\/code>\s*<\/pre>)/i;
-
-    const preBlocks: string[] = [];
-    const withMarkers = input.replace(preCodeRegex, (block) => {
-      const m = block.match(openCloseRegex);
-      if (!m) {
-        preBlocks.push(block);
-        return `__SAFEHTML_PRECODE_${preBlocks.length - 1}__`;
-      }
-      const escapedInner = escapeAngles(m[2]);
-      const rebuilt = `${m[1]}${escapedInner}${m[3]}`;
-      preBlocks.push(rebuilt);
-      return `__SAFEHTML_PRECODE_${preBlocks.length - 1}__`;
-    });
-
-    // Escape anything outside pre/code blocks.
-    const escapedOutside = escapeAngles(withMarkers);
-
-    // Restore pre/code blocks as real HTML tags.
-    return escapedOutside.replace(/__SAFEHTML_PRECODE_(\d+)__/g, (_, idxStr) => {
-      const idx = Number(idxStr);
-      return preBlocks[idx] ?? "";
-    });
+    return md.render(input);
   }, [html]);
 
   const clean = useMemo(() => {
-    return DOMPurify.sanitize(normalized, {
+    return DOMPurify.sanitize(renderedHtml, {
       USE_PROFILES: { html: true }
     });
-  }, [normalized]);
+  }, [renderedHtml]);
 
   useEffect(() => {
     // highlight code blocks after render

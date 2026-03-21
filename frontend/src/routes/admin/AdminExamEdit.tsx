@@ -49,6 +49,9 @@ import ExpandMoreOutlinedIcon from "@mui/icons-material/ExpandMoreOutlined";
 import HelpOutlineOutlinedIcon from "@mui/icons-material/HelpOutlineOutlined";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
+import MDEditor from "@uiw/react-md-editor";
+import "@uiw/react-md-editor/markdown-editor.css";
+import "@uiw/react-markdown-preview/markdown.css";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { SafeHtml } from "../../components/SafeHtml";
@@ -735,14 +738,15 @@ export default function AdminExamEdit() {
                   <TextField fullWidth size="small" label="Điểm" type="number" inputProps={{ step: 0.25 }} value={points} onChange={(e) => setPoints(Number(e.target.value))} />
                 </Stack>
 
-                <TextField
-                  label="Nội dung câu hỏi"
-                  value={promptHtml}
-                  onChange={(e) => setPromptHtml(e.target.value)}
-                  multiline
-                  minRows={4}
-                  helperText='Gợi ý: dùng <pre><code class="language-cpp">...</code></pre>, <pre><code class="language-sql">...</code></pre> hoặc <pre><code class="language-python">...</code></pre>'
-                />
+                <Box data-color-mode="light">
+                  <Typography variant="body2" sx={{ mb: 0.5, fontWeight: 700 }}>
+                    Nội dung câu hỏi (Markdown/HTML)
+                  </Typography>
+                  <MDEditor value={promptHtml} onChange={(v) => setPromptHtml(v || "")} preview="edit" height={220} />
+                  <Typography variant="caption" color="text.secondary">
+                    Hỗ trợ Markdown; nếu cần code block dùng ```cpp / ```sql / ```python.
+                  </Typography>
+                </Box>
 
                 {qtype === "mcq" ? (
                   <Stack spacing={1}>
@@ -768,14 +772,19 @@ export default function AdminExamEdit() {
                                 <Chip label={o.label} size="small" variant="outlined" />
                                 <FormControlLabel value={i} control={<Radio size="small" />} label="Đáp án đúng" />
                               </Stack>
-                              <TextField
-                                label={`Nội dung ${o.label}`}
-                                value={o.text_html}
-                                onChange={(e) =>
-                                  setMcqOpts((arr) => arr.map((x, idx) => (idx === i ? { ...x, text_html: e.target.value } : x)))
-                                }
-                                size="small"
-                              />
+                              <Box data-color-mode="light">
+                                <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
+                                  Nội dung {o.label} (Markdown/HTML)
+                                </Typography>
+                                <MDEditor
+                                  value={o.text_html}
+                                  onChange={(v) =>
+                                    setMcqOpts((arr) => arr.map((x, idx) => (idx === i ? { ...x, text_html: v || "" } : x)))
+                                  }
+                                  preview="edit"
+                                  height={120}
+                                />
+                              </Box>
                             </Stack>
                           </CardContent>
                         </Card>
@@ -816,14 +825,19 @@ export default function AdminExamEdit() {
                                   label="Ý đúng"
                                 />
                               </Stack>
-                              <TextField
-                                label={`Nội dung ${it.label} (HTML)`}
-                                value={it.text_html}
-                                onChange={(e) =>
-                                  setTfItems((arr) => arr.map((x, idx) => (idx === i ? { ...x, text_html: e.target.value } : x)))
-                                }
-                                size="small"
-                              />
+                              <Box data-color-mode="light">
+                                <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
+                                  Nội dung {it.label} (Markdown/HTML)
+                                </Typography>
+                                <MDEditor
+                                  value={it.text_html}
+                                  onChange={(v) =>
+                                    setTfItems((arr) => arr.map((x, idx) => (idx === i ? { ...x, text_html: v || "" } : x)))
+                                  }
+                                  preview="edit"
+                                  height={120}
+                                />
+                              </Box>
                             </Stack>
                           </CardContent>
                         </Card>
@@ -832,13 +846,12 @@ export default function AdminExamEdit() {
                   </Stack>
                 )}
 
-                <TextField
-                  label="Giải thích"
-                  value={explainHtml}
-                  onChange={(e) => setExplainHtml(e.target.value)}
-                  multiline
-                  minRows={2}
-                />
+                <Box data-color-mode="light">
+                  <Typography variant="body2" sx={{ mb: 0.5, fontWeight: 700 }}>
+                    Giải thích (Markdown/HTML)
+                  </Typography>
+                  <MDEditor value={explainHtml} onChange={(v) => setExplainHtml(v || "")} preview="edit" height={150} />
+                </Box>
               </Stack>
             </Grid>
 
