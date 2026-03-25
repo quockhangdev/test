@@ -35,4 +35,8 @@ def create_app() -> Flask:
 
     app.register_blueprint(api_bp, url_prefix="/api")
 
+    @app.route("/")
+    def index():
+        return "Hello, World!"
+
     return app
