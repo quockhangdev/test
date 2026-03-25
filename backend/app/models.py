@@ -132,3 +132,22 @@ class Attempt(db.Model):
     user = db.relationship("User", backref="attempts")
     exam = db.relationship("Exam", backref="attempts")
 
+
+class BlogPost(db.Model):
+    __tablename__ = "blog_posts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False)
+    slug = db.Column(db.String(255), nullable=False, unique=True, index=True)
+    summary = db.Column(db.Text, nullable=True)
+    content_markdown = db.Column(db.Text, nullable=False, default="")
+    cover_image_url = db.Column(db.String(500), nullable=True)
+    is_published = db.Column(db.Boolean, nullable=False, default=False)
+    author_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    author = db.relationship("User", backref="blog_posts")
+

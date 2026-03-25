@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import re
+import uuid
 from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, request
@@ -11,11 +14,12 @@ from flask_jwt_extended import (
 from pydantic import ValidationError
 
 from . import db
-from .models import Attempt, Exam, Favorite, Question, Role, Track, User
+from .models import Attempt, BlogPost, Exam, Favorite, Question, Role, Track, User
 from .schemas import (
     AttemptStartIn,
     AttemptSubmitIn,
     AdminUserUpdateIn,
+    BlogPostUpsertIn,
     ExamUpsertIn,
     LoginIn,
     QuestionUpsertIn,
@@ -33,6 +37,34 @@ def _pydantic(model_cls):
         return model_cls.model_validate(request.get_json(force=True))
     except ValidationError as e:
         return jsonify({"error": "validation_error", "details": e.errors()}), 400
+
+
+def _slugify(s: str) -> str:
+    slug = re.sub(r"[^a-zA-Z0-9]+", "-", (s or "").strip().lower()).strip("-")
+    return slug[:255] or "post"
+
+
+def _blog_post_row(p: BlogPost, include_content: bool = False):
+    row = {
+        "id": p.id,
+        "title": p.title,
+        "slug": p.slug,
+        "summary": p.summary,
+        "cover_image_url": p.cover_image_url,
+        "is_published": p.is_published,
+        "author": {
+            "id": p.author.id,
+            "email": p.author.email,
+            "full_name": p.author.full_name,
+        }
+        if p.author
+        else None,
+        "created_at": p.created_at.isoformat() + "Z" if p.created_at else None,
+        "updated_at": p.updated_at.isoformat() + "Z" if p.updated_at else None,
+    }
+    if include_content:
+        row["content_markdown"] = p.content_markdown
+    return row
 
 
 @api_bp.get("/health")
@@ -406,6 +438,39 @@ def get_attempt_detail(attempt_id: int):
     return jsonify({**_attempt_review_payload(a), "submitted": True})
 
 
+# -------------------- Blog (authenticated readers) --------------------
+
+
+@api_bp.get("/posts")
+@jwt_required()
+def list_posts():
+    rows = (
+        BlogPost.query.filter_by(is_published=True)
+        .order_by(BlogPost.created_at.desc())
+        .all()
+    )
+    return jsonify([_blog_post_row(p, include_content=False) for p in rows])
+
+
+@api_bp.get("/posts/<string:slug_or_id>")
+@jwt_required()
+def get_post(slug_or_id: str):
+    uid = int(get_jwt_identity())
+    u = User.query.get(uid)
+    is_admin = bool(u and u.role == Role.ADMIN.value)
+
+    q = None
+    if slug_or_id.isdigit():
+        q = BlogPost.query.get(int(slug_or_id))
+    if not q:
+        q = BlogPost.query.filter_by(slug=slug_or_id).first()
+    if not q:
+        return jsonify({"error": "not_found"}), 404
+    if not q.is_published and not is_admin:
+        return jsonify({"error": "not_found"}), 404
+    return jsonify(_blog_post_row(q, include_content=True))
+
+
 # -------------------- Admin: CRUD exams/questions --------------------
 
 
@@ -677,6 +742,101 @@ def admin_get_attempt_detail(attempt_id: int):
         return jsonify({**_attempt_public_row(a), "submitted": False}), 200
     u = User.query.get(a.user_id)
     return jsonify({**_attempt_review_payload(a), "submitted": True, "user": {"id": u.id, "email": u.email, "full_name": u.full_name} if u else None})
+
+
+# -------------------- Admin: Blog --------------------
+
+
+@api_bp.get("/admin/posts")
+@require_role(Role.ADMIN.value)
+def admin_list_posts():
+    rows = BlogPost.query.order_by(BlogPost.created_at.desc()).all()
+    return jsonify([_blog_post_row(p, include_content=True) for p in rows])
+
+
+@api_bp.post("/admin/posts")
+@require_role(Role.ADMIN.value)
+def admin_create_post():
+    payload = _pydantic(BlogPostUpsertIn)
+    if isinstance(payload, tuple):
+        return payload
+
+    slug = _slugify(payload.slug)
+    if BlogPost.query.filter_by(slug=slug).first():
+        return jsonify({"error": "slug_taken"}), 409
+
+    uid = int(get_jwt_identity())
+    p = BlogPost(
+        title=payload.title.strip(),
+        slug=slug,
+        summary=(payload.summary or "").strip() or None,
+        content_markdown=payload.content_markdown or "",
+        cover_image_url=(payload.cover_image_url or "").strip() or None,
+        is_published=payload.is_published,
+        author_id=uid,
+    )
+    db.session.add(p)
+    db.session.commit()
+    return jsonify({"id": p.id})
+
+
+@api_bp.put("/admin/posts/<int:post_id>")
+@require_role(Role.ADMIN.value)
+def admin_update_post(post_id: int):
+    p = BlogPost.query.get(post_id)
+    if not p:
+        return jsonify({"error": "not_found"}), 404
+
+    payload = _pydantic(BlogPostUpsertIn)
+    if isinstance(payload, tuple):
+        return payload
+
+    slug = _slugify(payload.slug)
+    existing = BlogPost.query.filter(BlogPost.slug == slug, BlogPost.id != post_id).first()
+    if existing:
+        return jsonify({"error": "slug_taken"}), 409
+
+    p.title = payload.title.strip()
+    p.slug = slug
+    p.summary = (payload.summary or "").strip() or None
+    p.content_markdown = payload.content_markdown or ""
+    p.cover_image_url = (payload.cover_image_url or "").strip() or None
+    p.is_published = payload.is_published
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@api_bp.delete("/admin/posts/<int:post_id>")
+@require_role(Role.ADMIN.value)
+def admin_delete_post(post_id: int):
+    p = BlogPost.query.get(post_id)
+    if not p:
+        return jsonify({"error": "not_found"}), 404
+    db.session.delete(p)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@api_bp.post("/admin/uploads/image")
+@require_role(Role.ADMIN.value)
+def admin_upload_image():
+    f = request.files.get("image")
+    if not f:
+        return jsonify({"error": "file_required"}), 400
+
+    filename = f.filename or ""
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
+        return jsonify({"error": "invalid_file_type"}), 400
+
+    upload_dir = os.path.join(os.path.dirname(__file__), "static", "uploads")
+    os.makedirs(upload_dir, exist_ok=True)
+    saved_name = f"{uuid.uuid4().hex}{ext}"
+    save_path = os.path.join(upload_dir, saved_name)
+    f.save(save_path)
+
+    url = request.host_url.rstrip("/") + f"/static/uploads/{saved_name}"
+    return jsonify({"url": url})
 
 
 # -------------------- Admin: Users --------------------

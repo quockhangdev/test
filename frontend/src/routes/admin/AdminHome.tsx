@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Card, CardActionArea, CardContent, Grid, Stack, Typography } from "@mui/material";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import PeopleOutlineOutlinedIcon from "@mui/icons-material/PeopleOutlineOutlined";
+import ArticleOutlinedIcon from "@mui/icons-material/ArticleOutlined";
 
 export default function AdminHome() {
   return (
@@ -30,6 +31,18 @@ export default function AdminHome() {
                 <Stack spacing={1} alignItems="center" textAlign="center">
                   <PeopleOutlineOutlinedIcon fontSize="large" />
                   <Typography fontWeight={800}>Người dùng</Typography>
+                </Stack>
+              </CardContent>
+            </CardActionArea>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={6} md={4}>
+          <Card variant="outlined">
+            <CardActionArea component={Link} to="/admin/posts">
+              <CardContent>
+                <Stack spacing={1} alignItems="center" textAlign="center">
+                  <ArticleOutlinedIcon fontSize="large" />
+                  <Typography fontWeight={800}>Bài viết</Typography>
                 </Stack>
               </CardContent>
             </CardActionArea>

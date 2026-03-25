@@ -25,6 +25,21 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return (await res.json()) as T;
 }
 
+async function requestRaw<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, init);
+  if (!res.ok) {
+    let data: ApiError | null = null;
+    try {
+      data = (await res.json()) as ApiError;
+    } catch {
+      // ignore
+    }
+    const msg = data?.error || `http_${res.status}`;
+    throw Object.assign(new Error(msg), { status: res.status, data });
+  }
+  return (await res.json()) as T;
+}
+
 export function authHeader(token: string | null): HeaderMap {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
@@ -114,6 +129,17 @@ export const api = {
   getAttempt: (token: string, attemptId: number) =>
     request<any>(`/attempts/${attemptId}`, { headers: authHeader(token) }),
 
+  listPosts: (token: string) =>
+    request<Array<{ id: number; title: string; slug: string; summary: string | null; cover_image_url: string | null; created_at: string | null; author: { id: number; email: string; full_name: string | null } | null }>>(
+      "/posts",
+      { headers: authHeader(token) }
+    ),
+  getPost: (token: string, slugOrId: string | number) =>
+    request<{ id: number; title: string; slug: string; summary: string | null; content_markdown: string; cover_image_url: string | null; is_published: boolean; created_at: string | null; author: { id: number; email: string; full_name: string | null } | null }>(
+      `/posts/${slugOrId}`,
+      { headers: authHeader(token) }
+    ),
+
   favoriteExam: (token: string, examId: number) =>
     request<{ ok: boolean; is_favorite: boolean }>(`/exams/${examId}/favorite`, { method: "POST", headers: authHeader(token) }),
   unfavoriteExam: (token: string, examId: number) =>
@@ -185,6 +211,32 @@ export const api = {
     },
     getAttempt: (token: string, attemptId: number) =>
       request<any>(`/admin/attempts/${attemptId}`, { headers: authHeader(token) }),
+
+    listPosts: (token: string) =>
+      request<any[]>(`/admin/posts`, { headers: authHeader(token) }),
+    createPost: (token: string, body: { title: string; slug: string; summary?: string | null; content_markdown: string; cover_image_url?: string | null; is_published?: boolean }) =>
+      request<{ id: number }>(`/admin/posts`, {
+        method: "POST",
+        headers: authHeader(token),
+        body: JSON.stringify(body)
+      }),
+    updatePost: (token: string, postId: number, body: { title: string; slug: string; summary?: string | null; content_markdown: string; cover_image_url?: string | null; is_published?: boolean }) =>
+      request<{ ok: boolean }>(`/admin/posts/${postId}`, {
+        method: "PUT",
+        headers: authHeader(token),
+        body: JSON.stringify(body)
+      }),
+    deletePost: (token: string, postId: number) =>
+      request<{ ok: boolean }>(`/admin/posts/${postId}`, { method: "DELETE", headers: authHeader(token) }),
+    uploadImage: (token: string, file: File) => {
+      const fd = new FormData();
+      fd.append("image", file);
+      return requestRaw<{ url: string }>(`/admin/uploads/image`, {
+        method: "POST",
+        headers: authHeader(token),
+        body: fd
+      });
+    },
 
     listUsers: (token: string, params: { q?: string } = {}) => {
       const qs = new URLSearchParams();

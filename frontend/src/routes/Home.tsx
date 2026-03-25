@@ -10,6 +10,7 @@ import {
   Chip,
   Grid,
   IconButton,
+  Pagination,
   Skeleton,
   Stack,
   Typography
@@ -36,6 +37,8 @@ export default function Home() {
     }> | null
   >(null);
   const [err, setErr] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const pageSize = 8;
 
   useEffect(() => {
     let alive = true;
@@ -52,6 +55,10 @@ export default function Home() {
       alive = false;
     };
   }, [token]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [exams?.length]);
 
   if (!user) {
     return (
@@ -72,7 +79,7 @@ export default function Home() {
       {err && <Alert severity="error">{err}</Alert>}
 
       <Grid container spacing={2}>
-        {(exams || []).map((e) => (
+        {(exams || []).slice((page - 1) * pageSize, page * pageSize).map((e) => (
           <Grid key={e.id} item xs={12} md={6}>
             <Card
               variant="outlined"
@@ -209,6 +216,17 @@ export default function Home() {
           </>
         )}
       </Grid>
+      {!!exams && exams.length > pageSize && (
+        <Stack direction="row" justifyContent="center" sx={{ mt: 2 }}>
+          <Pagination
+            page={page}
+            count={Math.max(1, Math.ceil(exams.length / pageSize))}
+            color="primary"
+            shape="rounded"
+            onChange={(_, p) => setPage(p)}
+          />
+        </Stack>
+      )}
     </Stack>
   );
 }

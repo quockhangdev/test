@@ -740,7 +740,7 @@ export default function AdminExamEdit() {
 
                 <Box data-color-mode="light">
                   <Typography variant="body2" sx={{ mb: 0.5, fontWeight: 700 }}>
-                    Nội dung câu hỏi (Markdown/HTML)
+                    Nội dung câu hỏi
                   </Typography>
                   <MDEditor value={promptHtml} onChange={(v) => setPromptHtml(v || "")} preview="edit" height={220} />
                   <Typography variant="caption" color="text.secondary">
@@ -774,7 +774,7 @@ export default function AdminExamEdit() {
                               </Stack>
                               <Box data-color-mode="light">
                                 <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
-                                  Nội dung {o.label} (Markdown/HTML)
+                                  Nội dung {o.label}
                                 </Typography>
                                 <MDEditor
                                   value={o.text_html}
@@ -827,7 +827,7 @@ export default function AdminExamEdit() {
                               </Stack>
                               <Box data-color-mode="light">
                                 <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
-                                  Nội dung {it.label} (Markdown/HTML)
+                                  Nội dung {it.label}
                                 </Typography>
                                 <MDEditor
                                   value={it.text_html}
@@ -848,7 +848,7 @@ export default function AdminExamEdit() {
 
                 <Box data-color-mode="light">
                   <Typography variant="body2" sx={{ mb: 0.5, fontWeight: 700 }}>
-                    Giải thích (Markdown/HTML)
+                    Giải thích
                   </Typography>
                   <MDEditor value={explainHtml} onChange={(v) => setExplainHtml(v || "")} preview="edit" height={150} />
                 </Box>

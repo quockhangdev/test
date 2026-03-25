@@ -15,46 +15,12 @@ const md = new MarkdownIt({
   breaks: true
 });
 
-const NON_RENDERABLE_TAGS = new Set([
-  "html",
-  "head",
-  "body",
-  "meta",
-  "title",
-  "style",
-  "script",
-  "link"
-]);
-
-function parseTagNames(input: string): string[] {
-  const names: string[] = [];
-  const re = /<\/?\s*([a-zA-Z][\w-]*)\b[^>]*>/g;
-  let m: RegExpExecArray | null = null;
-  while ((m = re.exec(input))) {
-    names.push(String(m[1] || "").toLowerCase());
-  }
-  return names;
-}
-
-function looksLikeRenderableHtml(input: string): boolean {
-  const names = parseTagNames(input);
-  if (names.length === 0) return false;
-  return names.some((n) => !NON_RENDERABLE_TAGS.has(n));
-}
-
 export function SafeHtml({ html }: { html: string }) {
   const ref = useRef<HTMLDivElement | null>(null);
 
   const renderedHtml = useMemo(() => {
     const input = String(html || "");
     if (!input.trim()) return "";
-
-    // Backward compatibility: existing content in DB may be HTML fragments.
-    // For text/markdown inputs (including cases like "Thẻ <head>"), use markdown parser.
-    if (looksLikeRenderableHtml(input)) {
-      return input;
-    }
-
     return md.render(input);
   }, [html]);
 

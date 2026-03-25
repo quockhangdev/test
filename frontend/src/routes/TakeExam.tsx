@@ -615,11 +615,13 @@ export default function TakeExam() {
               }>
                 <Grid item xs={12} md={3} lg={2.5}>
                   <Card variant="outlined">
-                    <CardContent sx={{ p: 1.25 }}>
-                      <Stack spacing={1}>
-                        <Typography fontWeight={800} variant="body2">
-                          Điều hướng
-                        </Typography>
+                    <CardContent sx={{ p: { xs: 1, md: 1.25 } }}>
+                      <Stack spacing={1.25}>
+                        <Stack direction="row" alignItems="center" justifyContent="space-between">
+                          <Typography fontWeight={800} variant="body2">
+                            Câu hỏi
+                          </Typography>
+                        </Stack>
                         <ToggleButtonGroup
                           exclusive
                           value={String(activeIdx)}
@@ -628,12 +630,18 @@ export default function TakeExam() {
                             setActiveIdx(Number(v));
                           }}
                           sx={{
-                            flexWrap: { xs: "nowrap", md: "wrap" },
-                            maxHeight: { xs: 64, md: 320 },
-                            overflowX: { xs: "auto", md: "hidden" },
-                            overflowY: { xs: "hidden", md: "auto" },
-                            alignContent: { xs: "center", md: "flex-start" },
-                            "& .MuiToggleButtonGroup-grouped": { mr: 0.5 }
+                            display: "grid",
+                            gridTemplateColumns: { xs: "repeat(6, minmax(0, 1fr))", md: "repeat(5, minmax(0, 1fr))" },
+                            gap: 0.5,
+                            maxHeight: { xs: 170, md: 320 },
+                            overflowY: "auto",
+                            width: "100%",
+                            "& .MuiToggleButtonGroup-grouped": {
+                              borderRadius: 1.5,
+                              border: "1px solid",
+                              borderColor: "divider",
+                              m: 0
+                            }
                           }}
                         >
                           {visibleQuestions.map((q, idx) => (
@@ -642,14 +650,15 @@ export default function TakeExam() {
                               value={String(idx)}
                               size="small"
                               sx={{
-                                minWidth: 38,
-                                px: 0.5,
-                                py: 0.25,
+                                minWidth: 0,
+                                width: "100%",
+                                py: 0.55,
+                                fontWeight: 600,
                                 ...(isAnswered(q)
                                   ? {
                                       bgcolor: idx === activeIdx ? "success.main" : "success.light",
                                       color: idx === activeIdx ? "success.contrastText" : "success.main",
-                                      border: idx === activeIdx ? "1px solid" : "2px solid",
+                                      border: "1px solid",
                                       borderColor: "success.main",
                                       "&:hover": {
                                         bgcolor: idx === activeIdx ? "success.dark" : "success.main",
@@ -671,6 +680,7 @@ export default function TakeExam() {
                             disabled={activeIdx <= 0}
                             onClick={() => setActiveIdx((i) => Math.max(0, i - 1))}
                             fullWidth
+                            sx={{ borderRadius: 999 }}
                           >
                             Trước
                           </Button>
@@ -680,6 +690,7 @@ export default function TakeExam() {
                             disabled={activeIdx >= visibleQuestions.length - 1}
                             onClick={() => setActiveIdx((i) => Math.min(visibleQuestions.length - 1, i + 1))}
                             fullWidth
+                            sx={{ borderRadius: 999 }}
                           >
                             Sau
                           </Button>
