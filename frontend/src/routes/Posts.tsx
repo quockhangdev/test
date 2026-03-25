@@ -1,8 +1,67 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Alert, Button, Card, CardContent, Chip, Pagination, Stack, Typography } from "@mui/material";
+import { Alert, Box, Card, CardActionArea, CardContent, Chip, Pagination, Stack, Typography } from "@mui/material";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
+
+const PICSUM_W = 600;
+const PICSUM_H = 800;
+
+const thumbColumnSx = {
+  position: "relative" as const,
+  flex: "0 0 auto",
+  width: { xs: 120, sm: 160, md: 200 },
+  minHeight: { xs: 132, sm: 152 },
+  alignSelf: "stretch",
+  bgcolor: "action.hover"
+};
+
+function PostCardThumb({ postId }: { postId: number }) {
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <Box sx={thumbColumnSx}>
+        <Box
+          sx={{
+            position: "absolute",
+            inset: 0,
+            display: "grid",
+            placeItems: "center",
+            bgcolor: "primary.main",
+            color: "primary.contrastText",
+            fontWeight: 900,
+            fontSize: "1.25rem"
+          }}
+        >
+          {String(postId).slice(-2)}
+        </Box>
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={thumbColumnSx}>
+      <Box
+        component="img"
+        src={`https://picsum.photos/seed/${postId}/${PICSUM_W}/${PICSUM_H}`}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        referrerPolicy="no-referrer"
+        onError={() => setFailed(true)}
+        sx={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          display: "block"
+        }}
+      />
+    </Box>
+  );
+}
 
 export default function Posts() {
   const { token } = useAuth();
@@ -44,25 +103,47 @@ export default function Posts() {
       ) : (
         <>
           {rows.slice((page - 1) * pageSize, page * pageSize).map((p) => (
-            <Card key={p.id} variant="outlined">
-              <CardContent>
-                <Stack spacing={1}>
-                  <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
-                    <Typography fontWeight={800}>{p.title}</Typography>
-                    <Chip size="small" variant="outlined" label={p.created_at ? new Date(p.created_at).toLocaleString() : "—"} />
+            <Card
+              key={p.id}
+              variant="outlined"
+              sx={{
+                overflow: "hidden",
+                transition: "box-shadow .15s ease, transform .15s ease",
+                "&:hover": { boxShadow: 4, transform: "translateY(-1px)" }
+              }}
+            >
+              <CardActionArea
+                component={Link}
+                to={`/posts/${p.slug}`}
+                sx={{ display: "flex", alignItems: "stretch", p: 0, textAlign: "left" }}
+              >
+                <PostCardThumb postId={p.id} />
+                <CardContent sx={{ flex: 1, py: { xs: 1.5, sm: 2 }, pl: { xs: 1.5, sm: 2 }, pr: { xs: 1.5, sm: 2 } }}>
+                  <Stack spacing={1} sx={{ minWidth: 0 }}>
+                      <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1} sx={{ minWidth: 0 }}>
+                        <Typography fontWeight={800} sx={{ minWidth: 0 }}>
+                          {p.title}
+                        </Typography>
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          label={p.created_at ? new Date(p.created_at).toLocaleString() : "—"}
+                          sx={{ flexShrink: 0 }}
+                        />
+                      </Stack>
+                      {p.summary && (
+                        <Typography variant="body2" color="text.secondary" sx={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                          {p.summary}
+                        </Typography>
+                      )}
+                      <Stack direction="row" justifyContent="flex-end">
+                        <Typography variant="body2" color="primary" fontWeight={600}>
+                          Đọc bài
+                        </Typography>
+                      </Stack>
                   </Stack>
-                  {p.summary && (
-                    <Typography variant="body2" color="text.secondary">
-                      {p.summary}
-                    </Typography>
-                  )}
-                  <Stack direction="row" justifyContent="flex-end">
-                    <Button component={Link} to={`/posts/${p.slug}`} size="small" variant="outlined">
-                      Đọc bài
-                    </Button>
-                  </Stack>
-                </Stack>
-              </CardContent>
+                </CardContent>
+              </CardActionArea>
             </Card>
           ))}
           {rows.length > pageSize && (

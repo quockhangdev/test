@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Alert, Button, Card, CardContent, Chip, Stack, Typography } from "@mui/material";
+import { Alert, Button, Card, CardContent, Chip, Stack, styled, Typography } from "@mui/material";
 import ArrowBackOutlinedIcon from "@mui/icons-material/ArrowBackOutlined";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -31,6 +31,13 @@ export default function PostDetail() {
   if (err) return <Alert severity="error">{err}</Alert>;
   if (!post) return <Typography color="text.secondary">Đang tải...</Typography>;
 
+  const CardContentNoPadding = styled(CardContent)({
+    padding: 0,
+    "&:last-child": {
+      paddingBottom: 0
+    }
+  });
+
   return (
     <Stack spacing={2}>
       <Stack direction="row" justifyContent="space-between" alignItems="center">
@@ -47,9 +54,9 @@ export default function PostDetail() {
       </Stack>
       {post.cover_image_url && (
         <Card variant="outlined">
-          <CardContent sx={{ p: 0 }}>
+          <CardContentNoPadding>
             <img src={post.cover_image_url} alt={post.title} style={{ width: "100%", display: "block", maxHeight: 380, objectFit: "cover" }} />
-          </CardContent>
+          </CardContentNoPadding>
         </Card>
       )}
       <Card variant="outlined">

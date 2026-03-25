@@ -23,6 +23,53 @@ import StarOutlinedIcon from "@mui/icons-material/StarOutlined";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 
+const PLACEWAIFU_SIZE = 88;
+
+function ExamCardThumb({ examId }: { examId: number }) {
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <Box
+        sx={{
+          width: { xs: 40, sm: 44 },
+          height: { xs: 40, sm: 44 },
+          borderRadius: 2,
+          bgcolor: "primary.main",
+          color: "primary.contrastText",
+          display: "grid",
+          placeItems: "center",
+          flex: "0 0 auto",
+          fontWeight: 900
+        }}
+      >
+        {String(examId).slice(-2)}
+      </Box>
+    );
+  }
+
+  return (
+    <Box
+      component="img"
+      src={`https://placewaifu.com/image/${PLACEWAIFU_SIZE}?v=${examId}`}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      referrerPolicy="no-referrer"
+      onError={() => setFailed(true)}
+      sx={{
+        width: { xs: 40, sm: 44 },
+        height: { xs: 40, sm: 44 },
+        borderRadius: 2,
+        flex: "0 0 auto",
+        objectFit: "cover",
+        display: "block",
+        bgcolor: "action.hover"
+      }}
+    />
+  );
+}
+
 export default function Home() {
   const { user, token } = useAuth();
   const [exams, setExams] = useState<
@@ -92,21 +139,7 @@ export default function Home() {
               <CardActionArea component={Link} to={`/exams/${e.id}`} sx={{ display: "block" }}>
                 <CardContent sx={{ p: { xs: 1.5, sm: 2 } }}>
                   <Stack direction="row" spacing={1.25} alignItems="flex-start">
-                    <Box
-                      sx={{
-                        width: { xs: 40, sm: 44 },
-                        height: { xs: 40, sm: 44 },
-                        borderRadius: 2,
-                        bgcolor: "primary.main",
-                        color: "primary.contrastText",
-                        display: "grid",
-                        placeItems: "center",
-                        flex: "0 0 auto",
-                        fontWeight: 900
-                      }}
-                    >
-                      {String(e.id).slice(-2)}
-                    </Box>
+                    <ExamCardThumb examId={e.id} />
 
                     <Stack spacing={1} sx={{ minWidth: 0, flex: 1 }}>
                       <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
