@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Alert,
+  AppBar,
   Box,
   Button,
   Card,
@@ -14,7 +15,6 @@ import {
   DialogTitle,
   FormControl,
   FormControlLabel,
-  Grid,
   InputLabel,
   IconButton,
   MenuItem,
@@ -26,6 +26,7 @@ import {
   ToggleButtonGroup,
   TablePagination,
   TextField,
+  Toolbar,
   Typography
 } from "@mui/material";
 import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
@@ -36,6 +37,7 @@ import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import ReplayRoundedIcon from "@mui/icons-material/ReplayRounded";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { useExamTakingLayout } from "../lib/examTakingLayout";
 import { SafeHtml } from "../components/SafeHtml";
 
 function parseIsoMaybeUtc(s: string): number {
@@ -105,6 +107,7 @@ function formatErrMessage(code: string): { severity: "error" | "warning"; text: 
 export default function TakeExam() {
   const { examId } = useParams();
   const { token, user } = useAuth();
+  const { setTakingExam } = useExamTakingLayout();
   const nav = useNavigate();
 
   const [loading, setLoading] = useState(true);
@@ -174,6 +177,11 @@ export default function TakeExam() {
       alive = false;
     };
   }, [token, examId]);
+
+  useEffect(() => {
+    setTakingExam(!!attemptId);
+    return () => setTakingExam(false);
+  }, [attemptId, setTakingExam]);
 
   const { part1, part2Common, part2app, part2cs } = useMemo(() => {
     const p1: Q[] = [];
@@ -439,8 +447,159 @@ export default function TakeExam() {
 
   const errUi = err ? formatErrMessage(err) : null;
 
+  const examQuestionGrid = (
+    <Box
+      sx={{
+        flex: 1,
+        minHeight: 0,
+        display: "flex",
+        flexDirection: { xs: "column", md: "row" },
+        gap: { xs: 1.5, md: 2 },
+        overflow: "hidden"
+      }}
+    >
+      <Box
+        sx={{
+          flexShrink: 0,
+          width: { xs: "100%", md: 260 },
+          maxWidth: { md: 300 },
+          maxHeight: { xs: "min(40vh, 260px)", md: "100%" },
+          overflowY: "auto",
+          alignSelf: { md: "stretch" }
+        }}
+      >
+        <Card variant="outlined">
+          <CardContent sx={{ p: { xs: 1, md: 1.25 } }}>
+            <Stack spacing={1.25}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                <Typography fontWeight={800} variant="body2">
+                  Câu hỏi
+                </Typography>
+              </Stack>
+              <ToggleButtonGroup
+                exclusive
+                value={String(activeIdx)}
+                onChange={(_, v) => {
+                  if (v === null) return;
+                  setActiveIdx(Number(v));
+                }}
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: { xs: "repeat(6, minmax(0, 1fr))", md: "repeat(5, minmax(0, 1fr))" },
+                  gap: 0.5,
+                  width: "100%",
+                  "& .MuiToggleButtonGroup-grouped": {
+                    borderRadius: 1.5,
+                    border: "1px solid",
+                    borderColor: "divider",
+                    m: 0
+                  }
+                }}
+              >
+                {visibleQuestions.map((q, idx) => (
+                  <ToggleButton
+                    key={q.id}
+                    value={String(idx)}
+                    size="small"
+                    sx={{
+                      minWidth: 0,
+                      width: "100%",
+                      py: 0.55,
+                      fontWeight: 600,
+                      ...(isAnswered(q)
+                        ? {
+                            bgcolor: idx === activeIdx ? "success.main" : "success.light",
+                            color: idx === activeIdx ? "success.contrastText" : "success.main",
+                            border: "1px solid",
+                            borderColor: "success.main",
+                            "&:hover": {
+                              bgcolor: idx === activeIdx ? "success.dark" : "success.main",
+                              borderColor: "success.dark"
+                            }
+                          }
+                        : null)
+                    }}
+                    color={isAnswered(q) ? "success" : "primary"}
+                  >
+                    {idx + 1}
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
+              <Stack direction="row" spacing={1}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  disabled={activeIdx <= 0}
+                  onClick={() => setActiveIdx((i) => Math.max(0, i - 1))}
+                  fullWidth
+                  sx={{ borderRadius: 999 }}
+                >
+                  Trước
+                </Button>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  disabled={activeIdx >= visibleQuestions.length - 1}
+                  onClick={() => setActiveIdx((i) => Math.min(visibleQuestions.length - 1, i + 1))}
+                  fullWidth
+                  sx={{ borderRadius: 999 }}
+                >
+                  Sau
+                </Button>
+              </Stack>
+              <Typography variant="body2" color="text.secondary">
+                {activeQ ? (
+                  <>
+                    Câu {activeNumber}/{visibleQuestions.length} •{" "}
+                    {activeQ.part === 1
+                      ? "Phần 1"
+                      : activeQ.track === null
+                        ? "Phần 2.1"
+                        : `Phần 2.2 - ${trackLabel(activeQ.track)}`}
+                  </>
+                ) : null}
+              </Typography>
+            </Stack>
+          </CardContent>
+        </Card>
+      </Box>
+      <Box
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          minHeight: 0,
+          overflowY: "auto",
+          WebkitOverflowScrolling: "touch"
+        }}
+      >
+        {activeQ ? (
+          <QuestionView
+            key={activeQ.id}
+            index={activeNumber}
+            q={activeQ}
+            value={answers[String(activeQ.id)]}
+            onChange={(v) => setAnswers((a) => ({ ...a, [String(activeQ.id)]: v }))}
+          />
+        ) : (
+          <Alert severity="info">Không có câu hỏi.</Alert>
+        )}
+      </Box>
+    </Box>
+  );
+
   return (
-    <Stack spacing={2}>
+    <Box
+      sx={{
+        width: "100%",
+        ...(started && {
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          minHeight: 0
+        })
+      }}
+    >
+    <Stack spacing={2} sx={{ ...(started ? { flex: 1, minHeight: 0 } : { px: { xs: 1, sm: 2 } }) }}>
       <Dialog
         open={openResume}
         onClose={() => setOpenResume(false)}
@@ -647,297 +806,242 @@ export default function TakeExam() {
         </Card>
       )}
 
-      <Card>
-        <CardContent sx={{ p: { xs: 1.5, md: 2 } }}>
-          <Stack spacing={1.25}>
-            <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} alignItems={{ md: "center" }} justifyContent="space-between">
-              <Stack spacing={0.25}>
-                <Typography fontWeight={900} variant="body1">
-                  {title}
-                </Typography>
-                {description && (
-                  <Typography color="text.secondary" variant="body2">
-                    {description}
+      {!started ? (
+        <Card>
+          <CardContent sx={{ p: { xs: 1.5, md: 2 } }}>
+            <Stack spacing={1.25}>
+              <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} alignItems={{ md: "center" }} justifyContent="space-between">
+                <Stack spacing={0.25}>
+                  <Typography fontWeight={900} variant="body1">
+                    {title}
                   </Typography>
-                )}
+                  {description && (
+                    <Typography color="text.secondary" variant="body2">
+                      {description}
+                    </Typography>
+                  )}
+                </Stack>
+                <Button variant="outlined" size="small" onClick={() => nav("/")} startIcon={<HomeOutlinedIcon />}>
+                  Về trang chủ
+                </Button>
               </Stack>
-              <Button variant="outlined" size="small" onClick={() => nav("/")} startIcon={<HomeOutlinedIcon />}>
-                Về trang chủ
-              </Button>
-            </Stack>
-            <Divider />
-            <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems={{ xs: "stretch", md: "center" }}>
-              {err && (
-                <Alert severity={errUi!.severity} sx={{ flex: 1 }}>
-                  {errUi!.text}
-                </Alert>
-              )}
-              <Chip
-                label={
-                  durationMinutes
-                    ? `Thời gian: ${durationMinutes} phút`
-                    : "Thời gian: không giới hạn"
-                }
-                size="small"
-                variant="outlined"
-              />
-              {expiresAt && timeLeftSec !== null && (
+              <Divider />
+              <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems={{ xs: "stretch", md: "center" }}>
+                {err && (
+                  <Alert severity={errUi!.severity} sx={{ flex: 1 }}>
+                    {errUi!.text}
+                  </Alert>
+                )}
                 <Chip
-                  color={timeLeftSec <= 60 ? "warning" : "default"}
-                  label={`Còn: ${Math.floor(timeLeftSec / 60)
-                    .toString()
-                    .padStart(2, "0")}:${(timeLeftSec % 60).toString().padStart(2, "0")}`}
+                  label={
+                    durationMinutes
+                      ? `Thời gian đề: ${durationMinutes} phút`
+                      : "Thời gian đề: không giới hạn"
+                  }
                   size="small"
                   variant="outlined"
                 />
-              )}
-              <FormControl sx={{ minWidth: 240, maxWidth: 360 }} size="small">
-                <InputLabel id="track-label">Định hướng</InputLabel>
-                <Select
-                  labelId="track-label"
-                  label="Định hướng"
-                  value={track || ""}
-                  onChange={(e) => {
-                    const v = e.target.value as any;
-                    setTrack(v || null);
-                    setAttemptId(null);
-                    setExpiresAt(null);
-                    setTimeLeftSec(null);
-                    setScore(null);
-                    setShowScoreSplash(false);
-                    if (draftKey) {
-                      try {
-                        localStorage.removeItem(draftKey);
-                      } catch {
-                        // ignore
+                <FormControl sx={{ minWidth: 240, maxWidth: 360 }} size="small">
+                  <InputLabel id="track-label">Định hướng</InputLabel>
+                  <Select
+                    labelId="track-label"
+                    label="Định hướng"
+                    value={track || ""}
+                    onChange={(e) => {
+                      const v = e.target.value as any;
+                      setTrack(v || null);
+                      setAttemptId(null);
+                      setExpiresAt(null);
+                      setTimeLeftSec(null);
+                      setScore(null);
+                      setShowScoreSplash(false);
+                      if (draftKey) {
+                        try {
+                          localStorage.removeItem(draftKey);
+                        } catch {
+                          // ignore
+                        }
                       }
+                    }}
+                  >
+                    <MenuItem value="">
+                      <em>-- Chọn định hướng --</em>
+                    </MenuItem>
+                    <MenuItem value="app">Tin học ứng dụng</MenuItem>
+                    <MenuItem value="cs">Khoa học máy tính</MenuItem>
+                  </Select>
+                </FormControl>
+                {track && (
+                  <Typography color="text.secondary" variant="body2">
+                    Chỉ làm <b>1</b> định hướng.
+                  </Typography>
+                )}
+                <Box sx={{ flex: 1 }} />
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<HistoryOutlinedIcon />}
+                  onClick={async () => {
+                    try {
+                      setOpenHistory(true);
+                      setHistoryBusy(true);
+                      setHistoryPage(0);
+                      const rows = await api.listMyAttempts(token!, Number(examId));
+                      setHistoryRows(rows);
+                    } catch (e: any) {
+                      setErr(e?.message || "history_failed");
+                    } finally {
+                      setHistoryBusy(false);
                     }
                   }}
                 >
-                  <MenuItem value="">
-                    <em>-- Chọn định hướng --</em>
-                  </MenuItem>
-                  <MenuItem value="app">Tin học ứng dụng</MenuItem>
-                  <MenuItem value="cs">Khoa học máy tính</MenuItem>
-                </Select>
-              </FormControl>
-              {track && (
-                <Typography color="text.secondary" variant="body2">
-                  Chỉ làm <b>1</b> định hướng.
-                </Typography>
-              )}
-              <Box sx={{ flex: 1 }} />
-              <Button
-                variant="outlined"
-                size="small"
-                startIcon={<HistoryOutlinedIcon />}
-                onClick={async () => {
-                  try {
-                    setOpenHistory(true);
-                    setHistoryBusy(true);
-                    setHistoryPage(0);
-                    const rows = await api.listMyAttempts(token!, Number(examId));
-                    setHistoryRows(rows);
-                  } catch (e: any) {
-                    setErr(e?.message || "history_failed");
-                  } finally {
-                    setHistoryBusy(false);
-                  }
-                }}
-              >
-                Lịch sử
-              </Button>
-            </Stack>
-            <Divider />
-            <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems={{ md: "center" }} justifyContent="space-between">
-              <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems={{ md: "center" }}>
-                {requiresPassword && (
-                  <TextField
+                  Lịch sử
+                </Button>
+              </Stack>
+              <Divider />
+              <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems={{ md: "center" }} justifyContent="space-between">
+                <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems={{ md: "center" }}>
+                  {requiresPassword && (
+                    <TextField
+                      size="small"
+                      type="password"
+                      label="Password đề"
+                      value={examPassword}
+                      onChange={(e) => setExamPassword(e.target.value)}
+                      sx={{ minWidth: 220 }}
+                    />
+                  )}
+                  <Button
+                    variant="contained"
                     size="small"
-                    type="password"
-                    label="Password đề"
-                    value={examPassword}
-                    onChange={(e) => setExamPassword(e.target.value)}
-                    sx={{ minWidth: 220 }}
+                    startIcon={<PlayArrowRoundedIcon />}
+                    disabled={!track || starting || (requiresPassword && !examPassword) || !!attemptId}
+                    onClick={async () => {
+                      try {
+                        setStarting(true);
+                        setErr(null);
+                        await startIfNeeded();
+                      } catch (e: any) {
+                        setErr(e?.message || "start_failed");
+                      } finally {
+                        setStarting(false);
+                      }
+                    }}
+                  >
+                    {attemptId ? "Đã bắt đầu" : starting ? "Đang bắt đầu..." : "Bắt đầu"}
+                  </Button>
+                </Stack>
+                <Typography color="text.secondary" variant="body2">
+                  {attemptId ? "Bạn đang làm bài." : "Bấm Bắt đầu để hiển thị câu hỏi."}
+                </Typography>
+              </Stack>
+              <Divider />
+              <Alert severity="info">
+                Bấm <b>Bắt đầu</b> để vào bài thi.
+              </Alert>
+            </Stack>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          <AppBar
+            position="fixed"
+            color="default"
+            elevation={1}
+            sx={{
+              zIndex: (theme) => theme.zIndex.appBar,
+              bgcolor: "background.paper",
+              borderBottom: 1,
+              borderColor: "divider"
+            }}
+          >
+            <Toolbar
+              variant="dense"
+              sx={{
+                gap: { xs: 0.5, sm: 1.5 },
+                flexWrap: "wrap",
+                px: { xs: 1, sm: 2 },
+                py: 0.5,
+                minHeight: 48
+              }}
+            >
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="subtitle2" fontWeight={800} noWrap title={title}>
+                  {title}
+                </Typography>
+                {track && (
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    label={trackLabel(track)}
+                    sx={{ display: { xs: "none", sm: "inline-flex" } }}
                   />
                 )}
+              </Stack>
+              <Box sx={{ flexShrink: 0, minWidth: { xs: 64, sm: 80 }, textAlign: "center" }}>
+                {expiresAt && timeLeftSec !== null ? (
+                  <Typography
+                    sx={{
+                      fontVariantNumeric: "tabular-nums",
+                      fontWeight: 700,
+                      fontSize: { xs: "0.95rem", sm: "1.1rem" },
+                      color: timeLeftSec <= 60 ? "warning.main" : "text.primary"
+                    }}
+                  >
+                    {`${Math.floor(timeLeftSec / 60)
+                      .toString()
+                      .padStart(2, "0")}:${(timeLeftSec % 60).toString().padStart(2, "0")}`}
+                  </Typography>
+                ) : (
+                  <Typography variant="caption" color="text.secondary" noWrap>
+                    Không giới hạn
+                  </Typography>
+                )}
+              </Box>
+              <Stack direction="row" spacing={0.5} alignItems="center" flexShrink={0}>
                 <Button
                   variant="contained"
                   size="small"
-                  startIcon={<PlayArrowRoundedIcon />}
-                  disabled={!track || starting || (requiresPassword && !examPassword) || !!attemptId}
-                  onClick={async () => {
-                    try {
-                      setStarting(true);
-                      setErr(null);
-                      await startIfNeeded();
-                    } catch (e: any) {
-                      setErr(e?.message || "start_failed");
-                    } finally {
-                      setStarting(false);
-                    }
-                  }}
-                >
-                  {attemptId ? "Đã bắt đầu" : starting ? "Đang bắt đầu..." : "Bắt đầu"}
-                </Button>
-              </Stack>
-              <Typography color="text.secondary" variant="body2">
-                {attemptId ? "Bạn đang làm bài." : "Bấm Bắt đầu để hiển thị câu hỏi."}
-              </Typography>
-            </Stack>
-            <Divider />
-            {!started ? (
-              <Alert severity="info">Bấm <b>Bắt đầu</b> để vào bài thi.</Alert>
-            ) : visibleQuestions.length === 0 ? (
-              <Alert severity="info">Chưa có câu hỏi cho đề này.</Alert>
-            ) : (
-              <Grid container spacing={
-                {xs: 0.5, md: 2, lg: 3}
-              }>
-                <Grid item xs={12} md={3} lg={2.5}>
-                  <Card variant="outlined">
-                    <CardContent sx={{ p: { xs: 1, md: 1.25 } }}>
-                      <Stack spacing={1.25}>
-                        <Stack direction="row" alignItems="center" justifyContent="space-between">
-                          <Typography fontWeight={800} variant="body2">
-                            Câu hỏi
-                          </Typography>
-                        </Stack>
-                        <ToggleButtonGroup
-                          exclusive
-                          value={String(activeIdx)}
-                          onChange={(_, v) => {
-                            if (v === null) return;
-                            setActiveIdx(Number(v));
-                          }}
-                          sx={{
-                            display: "grid",
-                            gridTemplateColumns: { xs: "repeat(6, minmax(0, 1fr))", md: "repeat(5, minmax(0, 1fr))" },
-                            gap: 0.5,
-                            maxHeight: { xs: 170, md: 320 },
-                            overflowY: "auto",
-                            width: "100%",
-                            "& .MuiToggleButtonGroup-grouped": {
-                              borderRadius: 1.5,
-                              border: "1px solid",
-                              borderColor: "divider",
-                              m: 0
-                            }
-                          }}
-                        >
-                          {visibleQuestions.map((q, idx) => (
-                            <ToggleButton
-                              key={q.id}
-                              value={String(idx)}
-                              size="small"
-                              sx={{
-                                minWidth: 0,
-                                width: "100%",
-                                py: 0.55,
-                                fontWeight: 600,
-                                ...(isAnswered(q)
-                                  ? {
-                                      bgcolor: idx === activeIdx ? "success.main" : "success.light",
-                                      color: idx === activeIdx ? "success.contrastText" : "success.main",
-                                      border: "1px solid",
-                                      borderColor: "success.main",
-                                      "&:hover": {
-                                        bgcolor: idx === activeIdx ? "success.dark" : "success.main",
-                                        borderColor: "success.dark"
-                                      }
-                                    }
-                                  : null)
-                              }}
-                              color={isAnswered(q) ? "success" : "primary"}
-                            >
-                              {idx + 1}
-                            </ToggleButton>
-                          ))}
-                        </ToggleButtonGroup>
-                        <Stack direction="row" spacing={1}>
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            disabled={activeIdx <= 0}
-                            onClick={() => setActiveIdx((i) => Math.max(0, i - 1))}
-                            fullWidth
-                            sx={{ borderRadius: 999 }}
-                          >
-                            Trước
-                          </Button>
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            disabled={activeIdx >= visibleQuestions.length - 1}
-                            onClick={() => setActiveIdx((i) => Math.min(visibleQuestions.length - 1, i + 1))}
-                            fullWidth
-                            sx={{ borderRadius: 999 }}
-                          >
-                            Sau
-                          </Button>
-                        </Stack>
-                        <Typography variant="body2" color="text.secondary">
-                          {activeQ ? (
-                            <>
-                              Câu {activeNumber}/{visibleQuestions.length} •{" "}
-                              {activeQ.part === 1
-                                ? "Phần 1"
-                                : activeQ.track === null
-                                  ? "Phần 2.1"
-                                  : `Phần 2.2 - ${trackLabel(activeQ.track)}`}
-                            </>
-                          ) : null}
-                        </Typography>
-                      </Stack>
-                    </CardContent>
-                  </Card>
-                </Grid>
-                <Grid item xs={12} md={9} lg={9.5}>
-                  {activeQ ? (
-                    <QuestionView
-                      key={activeQ.id}
-                      index={activeNumber}
-                      q={activeQ}
-                      value={answers[String(activeQ.id)]}
-                      onChange={(v) => setAnswers((a) => ({ ...a, [String(activeQ.id)]: v }))}
-                    />
-                  ) : (
-                    <Alert severity="info">Không có câu hỏi.</Alert>
-                  )}
-                </Grid>
-              </Grid>
-            )}
-          </Stack>
-        </CardContent>
-      </Card>
-
-      {/* Part 2 is integrated into single-question mode via navigation */}
-
-      {started && (
-        <Card>
-          <CardContent sx={{ p: { xs: 1.5, md: 2 } }}>
-            <Stack spacing={1}>
-              <Stack direction="row" alignItems="center" justifyContent="space-between">
-                <Box>
-                  <Typography fontWeight={800}>Nộp bài</Typography>
-                  <Typography color="text.secondary" variant="body2">
-                    Điểm sẽ chấm tự động theo đáp án.
-                  </Typography>
-                </Box>
-                <Button
-                  variant="contained"
                   disabled={submitting || !track || !attemptId}
                   startIcon={<SendOutlinedIcon />}
                   onClick={() => requestSubmit()}
                 >
                   {submitting ? "Đang nộp..." : "Nộp bài"}
                 </Button>
+                <IconButton size="small" edge="end" onClick={() => nav("/")} aria-label="Về trang chủ" color="inherit">
+                  <HomeOutlinedIcon />
+                </IconButton>
               </Stack>
-              {err && <Alert severity={errUi!.severity}>{errUi!.text}</Alert>}
-            </Stack>
-          </CardContent>
-        </Card>
+            </Toolbar>
+          </AppBar>
+          <Toolbar variant="dense" sx={{ minHeight: 48 }} />
+          <Box
+            sx={{
+              px: { xs: 1, sm: 2 },
+              pb: 2,
+              pt: 0,
+              flex: 1,
+              minHeight: 0,
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden"
+            }}
+          >
+            {err && (
+              <Alert severity={errUi!.severity} sx={{ mb: 2, flexShrink: 0 }}>
+                {errUi!.text}
+              </Alert>
+            )}
+            {visibleQuestions.length === 0 ? (
+              <Alert severity="info">Chưa có câu hỏi cho đề này.</Alert>
+            ) : (
+              examQuestionGrid
+            )}
+          </Box>
+        </>
       )}
+
+      {/* Part 2 is integrated into single-question mode via navigation */}
 
       <Dialog open={openHistory} onClose={() => setOpenHistory(false)} fullWidth maxWidth="md">
         <DialogTitle>
@@ -1089,6 +1193,7 @@ export default function TakeExam() {
         </DialogContent>
       </Dialog>
     </Stack>
+    </Box>
   );
 }
 

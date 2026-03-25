@@ -21,6 +21,7 @@ import AdminPanelSettingsOutlinedIcon from "@mui/icons-material/AdminPanelSettin
 import MenuOutlinedIcon from "@mui/icons-material/MenuOutlined";
 import ArticleOutlinedIcon from "@mui/icons-material/ArticleOutlined";
 import { AuthProvider, useAuth } from "../lib/auth";
+import { ExamTakingLayoutProvider, useExamTakingLayout } from "../lib/examTakingLayout";
 import Home from "./Home";
 import Login from "./Login";
 import Register from "./Register";
@@ -31,8 +32,11 @@ import PostDetail from "./PostDetail";
 
 function Shell({ children }: { children: React.ReactNode }) {
   const { user, loading, logout } = useAuth();
+  const { isTakingExam } = useExamTakingLayout();
   const loc = useLocation();
-  const isExam = loc.pathname.startsWith("/exams/");
+  const isExamRoute = loc.pathname.startsWith("/exams/");
+  /** Chỉ ẩn navbar/footer khi đang trong lượt làm bài (đã Bắt đầu / Tiếp tục). */
+  const fullscreenExam = isExamRoute && isTakingExam;
   const [menuEl, setMenuEl] = useState<HTMLElement | null>(null);
   const menuOpen = !!menuEl;
 
@@ -52,6 +56,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "background.default", display: "flex", flexDirection: "column" }}>
+      {!fullscreenExam && (
       <AppBar
         position="sticky"
         color="default"
@@ -196,24 +201,34 @@ function Shell({ children }: { children: React.ReactNode }) {
           </Container>
         </Toolbar>
       </AppBar>
+      )}
       <Container
-        maxWidth={isExam ? false : "lg"}
+        maxWidth={fullscreenExam ? false : "lg"}
         sx={{
-          py: 3,
+          py: fullscreenExam ? 0 : 3,
+          px: fullscreenExam ? { xs: 0, sm: 0 } : { xs: 1.5, sm: 2 },
           flex: 1,
-          px: isExam ? { xs: 1, md: 3, lg: 4 } : { xs: 1.5, sm: 2 }
+          ...(fullscreenExam && {
+            display: "flex",
+            flexDirection: "column",
+            minHeight: 0
+          })
         }}
       >
         {children}
       </Container>
-      <Divider />
-      <Box component="footer" sx={{ py: 2, bgcolor: "background.paper" }}>
-        <Container maxWidth="lg">
-          <Typography variant="body2" color="text.secondary">
-          Ôn thi Tin học Trung học Phổ thông Quốc gia © 2026
-          </Typography>
-        </Container>
-      </Box>
+      {!fullscreenExam && (
+        <>
+          <Divider />
+          <Box component="footer" sx={{ py: 2, bgcolor: "background.paper" }}>
+            <Container maxWidth="lg">
+              <Typography variant="body2" color="text.secondary">
+                Ôn thi Tin học Trung học Phổ thông Quốc gia © 2026
+              </Typography>
+            </Container>
+          </Box>
+        </>
+      )}
     </Box>
   );
 }
@@ -237,6 +252,7 @@ function RequireAdmin({ children }: { children: JSX.Element }) {
 export default function App() {
   return (
     <AuthProvider>
+      <ExamTakingLayoutProvider>
       <Shell>
         <Routes>
           <Route path="/" element={<Home />} />
@@ -276,6 +292,7 @@ export default function App() {
           />
         </Routes>
       </Shell>
+      </ExamTakingLayoutProvider>
     </AuthProvider>
   );
 }
