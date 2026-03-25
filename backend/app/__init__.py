@@ -25,6 +25,7 @@ def create_app() -> Flask:
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
     cors_origins = os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
+    print(cors_origins)
     CORS(app, resources={r"/api/*": {"origins": [o.strip() for o in cors_origins]}})
 
     db.init_app(app)
