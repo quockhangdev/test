@@ -10,7 +10,8 @@ hljs.registerLanguage("python", python);
 hljs.registerLanguage("py", python);
 
 const md = new MarkdownIt({
-  html: false, // keep markdown safe; raw html in markdown is escaped
+  // Cho phép thẻ HTML trong nội dung Markdown; đầu ra vẫn qua DOMPurify.
+  html: true,
   linkify: true,
   breaks: true
 });
