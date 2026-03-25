@@ -9,6 +9,7 @@ import {
   Chip,
   Divider,
   Dialog,
+  DialogActions,
   DialogContent,
   DialogTitle,
   FormControl,
@@ -32,6 +33,7 @@ import SendOutlinedIcon from "@mui/icons-material/SendOutlined";
 import PlayArrowRoundedIcon from "@mui/icons-material/PlayArrowRounded";
 import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
+import ReplayRoundedIcon from "@mui/icons-material/ReplayRounded";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { SafeHtml } from "../components/SafeHtml";
@@ -67,6 +69,22 @@ function trackLabel(t: "app" | "cs" | null | undefined): string {
   if (t === "app") return "Tin học ứng dụng";
   if (t === "cs") return "Khoa học máy tính";
   return "—";
+}
+
+function isQuestionAnswered(q: Q, answers: Record<string, any>): boolean {
+  const v = answers[String(q.id)];
+  if (!v) return false;
+  if (q.qtype === "mcq") {
+    const idx = (v as any).choiceIndex;
+    if (!Number.isFinite(idx)) return false;
+    return idx >= 0 && idx < q.options.length;
+  }
+  if (q.qtype === "tf_multi") {
+    const itemsAns = (v as any).items;
+    if (!itemsAns || typeof itemsAns !== "object") return false;
+    return q.items.every((it) => Object.prototype.hasOwnProperty.call(itemsAns, it.label));
+  }
+  return false;
 }
 
 function formatErrMessage(code: string): { severity: "error" | "warning"; text: string } {
@@ -126,6 +144,8 @@ export default function TakeExam() {
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [score, setScore] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [showScoreSplash, setShowScoreSplash] = useState(false);
+  const [openIncompleteSubmit, setOpenIncompleteSubmit] = useState(false);
 
   const draftKey = useMemo(() => {
     if (!user?.id || !examId) return null;
@@ -192,21 +212,19 @@ export default function TakeExam() {
   const activeNumber = activeIdx + 1;
 
   function isAnswered(q: Q): boolean {
-    const v = answers[String(q.id)];
-    if (!v) return false;
-    if (q.qtype === "mcq") {
-      const idx = (v as any).choiceIndex;
-      if (!Number.isFinite(idx)) return false;
-      return idx >= 0 && idx < q.options.length;
-    }
-    if (q.qtype === "tf_multi") {
-      const itemsAns = (v as any).items;
-      if (!itemsAns || typeof itemsAns !== "object") return false;
-      // Mark as done only when user has decided for all statements.
-      return q.items.every((it) => Object.prototype.hasOwnProperty.call(itemsAns, it.label));
-    }
-    return false;
+    return isQuestionAnswered(q, answers);
   }
+
+  const incompleteSubmitInfo = useMemo(() => {
+    const unansweredNumbers: number[] = [];
+    for (let i = 0; i < visibleQuestions.length; i++) {
+      if (!isQuestionAnswered(visibleQuestions[i], answers)) unansweredNumbers.push(i + 1);
+    }
+    return {
+      unansweredCount: unansweredNumbers.length,
+      unansweredNumbers
+    };
+  }, [visibleQuestions, answers]);
 
   // restore draft after exam loaded
   useEffect(() => {
@@ -264,6 +282,7 @@ export default function TakeExam() {
     setStarting(false);
     setAnswers({});
     setActiveIdx(0);
+    setShowScoreSplash(false);
     if (draftKey) {
       try {
         localStorage.removeItem(draftKey);
@@ -271,6 +290,57 @@ export default function TakeExam() {
         // ignore
       }
     }
+  }
+
+  /** Sau khi nộp thành công: kết thúc lượt làm (không còn attempt), giữ điểm cho popup. */
+  function endSessionAfterSubmit() {
+    setAttemptId(null);
+    setExpiresAt(null);
+    setTimeLeftSec(null);
+    setSubmitting(false);
+    setStarting(false);
+    setAnswers({});
+    setActiveIdx(0);
+    if (draftKey) {
+      try {
+        localStorage.removeItem(draftKey);
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  /** Làm lại từ đầu: xóa hết trạng thái lượt trước (kể cả điểm hiển thị). */
+  function beginRetake() {
+    clearAttemptState();
+    setErr(null);
+  }
+
+  async function performSubmit() {
+    if (!token || !attemptId) return;
+    try {
+      setSubmitting(true);
+      setErr(null);
+      setOpenIncompleteSubmit(false);
+      const res = await api.submitAttempt(token, attemptId, answers);
+      setScore(res.score);
+      setShowScoreSplash(true);
+      endSessionAfterSubmit();
+    } catch (e: any) {
+      const msg = e?.message || "submit_failed";
+      setErr(msg);
+      if (msg === "time_up") clearAttemptState();
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function requestSubmit() {
+    if (incompleteSubmitInfo.unansweredCount > 0) {
+      setOpenIncompleteSubmit(true);
+      return;
+    }
+    void performSubmit();
   }
 
   // persist draft during attempt
@@ -308,6 +378,8 @@ export default function TakeExam() {
     if (!track) throw new Error("missing_track");
     if (attemptId) return attemptId;
     const res = await api.startAttempt(token, Number(examId), track, requiresPassword ? examPassword : undefined);
+    setScore(null);
+    setShowScoreSplash(false);
     setAttemptId(res.attempt_id);
     setExpiresAt(res.expires_at);
     if (res.expires_at) {
@@ -342,22 +414,8 @@ export default function TakeExam() {
       clearAttemptState();
       return;
     }
-    // auto submit when time is up
-    (async () => {
-      try {
-        setSubmitting(true);
-        setErr(null);
-        const res = await api.submitAttempt(token!, attemptId, answers);
-        setScore(res.score);
-      } catch (e: any) {
-        // backend may return time_up if already expired, keep UI stable
-        const msg = e?.message || "time_up";
-        setErr(msg);
-        if (msg === "time_up") clearAttemptState();
-      } finally {
-        setSubmitting(false);
-      }
-    })();
+    // auto submit when time is up (không hỏi câu chưa làm — hết giờ là nộp)
+    void performSubmit();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeLeftSec, attemptId, score, expiresAt, token, answers]);
 
@@ -467,6 +525,128 @@ export default function TakeExam() {
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={showScoreSplash && score !== null}
+        onClose={() => setShowScoreSplash(false)}
+        fullWidth
+        maxWidth="sm"
+        aria-labelledby="score-splash-title"
+        PaperProps={{
+          elevation: 8,
+          sx: {
+            borderRadius: 3,
+            overflow: "hidden",
+            background: (theme) =>
+              theme.palette.mode === "dark"
+                ? `linear-gradient(160deg, ${theme.palette.grey[900]} 0%, ${theme.palette.primary.dark}33 100%)`
+                : `linear-gradient(160deg, ${theme.palette.background.paper} 0%, ${theme.palette.primary.light}22 55%, ${theme.palette.background.paper} 100%)`
+          }
+        }}
+      >
+        <DialogContent sx={{ px: { xs: 2, sm: 4 }, py: { xs: 4, sm: 5 }, textAlign: "center" }}>
+          <Stack spacing={2.5} alignItems="center">
+            <Typography id="score-splash-title" variant="overline" color="text.secondary" letterSpacing={2} fontWeight={700}>
+              Kết quả
+            </Typography>
+            <Typography
+              component="p"
+              sx={{
+                fontWeight: 900,
+                lineHeight: 1.05,
+                fontSize: { xs: "clamp(3rem, 14vw, 4.5rem)", sm: "clamp(3.5rem, 10vw, 5.5rem)" },
+                color: "primary.main",
+                textShadow: (theme) =>
+                  theme.palette.mode === "dark" ? "0 0 40px rgba(144,202,249,0.25)" : "none"
+              }}
+            >
+              {score !== null ? score.toFixed(2) : "—"}
+            </Typography>
+            <Typography variant="h6" fontWeight={600} color="text.primary">
+              điểm
+            </Typography>
+            <Typography color="text.secondary" variant="body2" sx={{ maxWidth: 360 }}>
+              Bài làm đã kết thúc. Bạn có thể làm lại từ đầu (lượt làm mới) bất cứ lúc nào.
+            </Typography>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ pt: 1, width: "100%", maxWidth: 400 }}>
+              <Button
+                fullWidth
+                variant="contained"
+                size="large"
+                startIcon={<ReplayRoundedIcon />}
+                onClick={() => {
+                  beginRetake();
+                }}
+              >
+                Làm lại từ đầu
+              </Button>
+              <Button fullWidth variant="outlined" size="large" onClick={() => setShowScoreSplash(false)}>
+                Đóng
+              </Button>
+            </Stack>
+          </Stack>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={openIncompleteSubmit}
+        onClose={() => setOpenIncompleteSubmit(false)}
+        fullWidth
+        maxWidth="sm"
+        aria-labelledby="incomplete-submit-title"
+      >
+        <DialogTitle id="incomplete-submit-title">
+          <Typography fontWeight={800}>Chưa làm hết bài</Typography>
+        </DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            <Alert severity="warning">
+              Bạn còn <strong>{incompleteSubmitInfo.unansweredCount}</strong> câu chưa trả lời trên tổng{" "}
+              <strong>{visibleQuestions.length}</strong> câu. Bạn có thể quay lại làm tiếp hoặc vẫn nộp bài (các câu
+              chưa làm sẽ không được tính điểm).
+            </Alert>
+            <Typography variant="body2" color="text.secondary" fontWeight={600}>
+              Câu chưa làm:
+            </Typography>
+            <Stack direction="row" flexWrap="wrap" gap={0.75} useFlexGap>
+              {incompleteSubmitInfo.unansweredNumbers.map((n) => (
+                <Chip key={n} size="small" label={`Câu ${n}`} color="warning" variant="outlined" />
+              ))}
+            </Stack>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, gap: 1, flexWrap: "wrap" }}>
+          <Button
+            variant="outlined"
+            onClick={() => {
+              const first = incompleteSubmitInfo.unansweredNumbers[0];
+              if (first !== undefined) setActiveIdx(first - 1);
+              setOpenIncompleteSubmit(false);
+            }}
+          >
+            Quay lại làm bài
+          </Button>
+          <Button variant="contained" color="warning" onClick={() => void performSubmit()} disabled={submitting}>
+            {submitting ? "Đang nộp..." : "Vẫn nộp bài"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {score !== null && !attemptId && !showScoreSplash && (
+        <Card variant="outlined">
+          <CardContent sx={{ py: 1.5, "&:last-child": { pb: 1.5 } }}>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ sm: "center" }} justifyContent="space-between">
+              <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                <Typography fontWeight={800}>Kết quả vừa rồi</Typography>
+                <Chip color="success" variant="outlined" label={`${score.toFixed(2)} điểm`} />
+              </Stack>
+              <Button variant="outlined" size="small" startIcon={<ReplayRoundedIcon />} onClick={beginRetake}>
+                Làm lại từ đầu
+              </Button>
+            </Stack>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardContent sx={{ p: { xs: 1.5, md: 2 } }}>
           <Stack spacing={1.25}>
@@ -524,6 +704,7 @@ export default function TakeExam() {
                     setExpiresAt(null);
                     setTimeLeftSec(null);
                     setScore(null);
+                    setShowScoreSplash(false);
                     if (draftKey) {
                       try {
                         localStorage.removeItem(draftKey);
@@ -745,30 +926,14 @@ export default function TakeExam() {
                 </Box>
                 <Button
                   variant="contained"
-                  disabled={submitting || !track || score !== null || !attemptId}
+                  disabled={submitting || !track || !attemptId}
                   startIcon={<SendOutlinedIcon />}
-                  onClick={async () => {
-                    try {
-                      setSubmitting(true);
-                      setErr(null);
-                      const res = await api.submitAttempt(token!, attemptId!, answers);
-                      setScore(res.score);
-                    } catch (e: any) {
-                      setErr(e?.message || "submit_failed");
-                    } finally {
-                      setSubmitting(false);
-                    }
-                  }}
+                  onClick={() => requestSubmit()}
                 >
-                  {score === null ? (submitting ? "Đang nộp..." : "Nộp bài") : "Đã nộp"}
+                  {submitting ? "Đang nộp..." : "Nộp bài"}
                 </Button>
               </Stack>
               {err && <Alert severity={errUi!.severity}>{errUi!.text}</Alert>}
-              {score !== null && (
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <Chip label={`Điểm: ${score.toFixed(2)}`} color="success" variant="outlined" />
-                </Stack>
-              )}
             </Stack>
           </CardContent>
         </Card>
@@ -866,7 +1031,7 @@ export default function TakeExam() {
                         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
                           <Chip size="small" variant="outlined" label={`Câu ${idx + 1}`} />
                           <Chip size="small" variant="outlined" label={`${q.earned_points?.toFixed?.(2) ?? q.earned_points}/${q.points}`} color="success" />
-                          <Chip size="small" variant="outlined" label={`Type: ${q.qtype}`} />
+                          {/* <Chip size="small" variant="outlined" label={`Type: ${q.qtype}`} /> */}
                         </Stack>
                         <SafeHtml html={q.prompt_html} />
                         <Divider />

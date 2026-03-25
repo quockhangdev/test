@@ -1133,7 +1133,7 @@ export default function AdminExamEdit() {
                         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center">
                           <Chip size="small" variant="outlined" label={`Câu ${idx + 1}`} />
                           <Chip size="small" variant="outlined" label={`${q.earned_points?.toFixed?.(2) ?? q.earned_points}/${q.points}`} color="success" />
-                          <Chip size="small" variant="outlined" label={`Type: ${q.qtype}`} />
+                          {/* <Chip size="small" variant="outlined" label={`Type: ${q.qtype}`} /> */}
                         </Stack>
                         <SafeHtml html={q.prompt_html} />
                       </Stack>
