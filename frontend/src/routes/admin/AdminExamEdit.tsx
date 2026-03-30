@@ -1149,7 +1149,12 @@ export default function AdminExamEdit() {
               <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                 <Chip size="small" variant="outlined" label={`Attempt #${attemptDetail.id}`} />
                 {attemptDetail.user?.email && <Chip size="small" variant="outlined" label={attemptDetail.user.email} />}
-                {attemptDetail.score !== null && <Chip size="small" color="success" variant="outlined" label={`Điểm: ${Number(attemptDetail.score).toFixed(2)}`} />}
+                {attemptDetail.score !== null && attemptDetail.score !== undefined && (
+                  <Chip size="small" color="success" variant="outlined" label={`Điểm: ${Number(attemptDetail.score).toFixed(2)}`} />
+                )}
+                {attemptDetail.track_chosen && (
+                  <Chip size="small" variant="outlined" label={`Định hướng: ${parseTrackLabel(attemptDetail.track_chosen)}`} />
+                )}
               </Stack>
               <Divider />
               <Stack spacing={1.5}>
@@ -1160,9 +1165,57 @@ export default function AdminExamEdit() {
                         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center">
                           <Chip size="small" variant="outlined" label={`Câu ${idx + 1}`} />
                           <Chip size="small" variant="outlined" label={`${q.earned_points?.toFixed?.(2) ?? q.earned_points}/${q.points}`} color="success" />
-                          {/* <Chip size="small" variant="outlined" label={`Type: ${q.qtype}`} /> */}
                         </Stack>
                         <SafeHtml html={q.prompt_html} />
+                        <Divider />
+                        {q.qtype === "mcq" ? (
+                          <Stack spacing={0.5}>
+                            {(q.options || []).map((o: any, i: number) => {
+                              const ua = q.user_answer?.choiceIndex;
+                              const isCorrect = q.correct_index === i;
+                              const isPicked = ua === i;
+                              return (
+                                <Stack key={o.label} direction="row" spacing={1} alignItems="center">
+                                  <Chip size="small" label={o.label} variant="outlined" />
+                                  {isCorrect && <Chip size="small" color="success" label="Đúng" />}
+                                  {isPicked && <Chip size="small" color={isCorrect ? "success" : "warning"} label="Học sinh chọn" />}
+                                  <Box sx={{ flex: 1 }}>
+                                    <SafeHtml html={o.text_html} />
+                                  </Box>
+                                </Stack>
+                              );
+                            })}
+                          </Stack>
+                        ) : (
+                          <Stack spacing={0.75}>
+                            {(q.items || []).map((it: any) => {
+                              const ua = q.user_answer?.items?.[it.label];
+                              const ok = ua === it.is_true;
+                              return (
+                                <Stack key={it.label} direction="row" spacing={1} alignItems="center">
+                                  <Chip size="small" label={it.label} variant="outlined" />
+                                  <Chip size="small" label={it.is_true ? "Đúng" : "Sai"} color="success" variant="outlined" />
+                                  {ua !== undefined && (
+                                    <Chip
+                                      size="small"
+                                      label={`Học sinh: ${ua ? "Đúng" : "Sai"}`}
+                                      color={ok ? "success" : "warning"}
+                                    />
+                                  )}
+                                  <Box sx={{ flex: 1 }}>
+                                    <SafeHtml html={it.text_html} />
+                                  </Box>
+                                </Stack>
+                              );
+                            })}
+                          </Stack>
+                        )}
+                        {q.explanation_html && (
+                          <>
+                            <Divider />
+                            <SafeHtml html={q.explanation_html} />
+                          </>
+                        )}
                       </Stack>
                     </CardContent>
                   </Card>
