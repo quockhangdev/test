@@ -63,10 +63,16 @@ const LABELS = ["A", "B", "C", "D", "E", "F"];
 
 type Section = "1" | "2.1" | "2.2";
 
-function trackLabel(t: any): string {
+function parseQtypeLabel(t: "mcq" | "tf_multi"): string {
+  if (t === "mcq") return "Trắc nghiệm";
+  if (t === "tf_multi") return "Đúng/Sai";
+  return "—";
+}
+
+function parseTrackLabel(t: "app" | "cs" | null): string {
   if (t === "app") return "Tin học ứng dụng";
   if (t === "cs") return "Khoa học máy tính";
-  return "—";
+  return "Chung";
 }
 
 export default function AdminExamEdit() {
@@ -601,14 +607,14 @@ export default function AdminExamEdit() {
                           />
                         </TableCell>
                         <TableCell>
-                          {q.part === 2 && q.track ? <Chip label={q.track} size="small" variant="outlined" /> : "—"}
+                          {q.part === 2 && q.track ? <Chip label={parseTrackLabel(q.track as "app" | "cs" | null)} size="small" variant="outlined" /> : "—"}
                         </TableCell>
                         <TableCell>
-                          <Chip label={q.qtype} size="small" variant="outlined" />
+                          <Chip label={parseQtypeLabel(q.qtype as "mcq" | "tf_multi")} size="small" variant="outlined" />
                         </TableCell>
                         <TableCell>{q.order_in_exam}</TableCell>
                         <TableCell>{q.points}</TableCell>
-                        <TableCell sx={{ maxWidth: 520 }}>
+                        <TableCell sx={{ maxWidth: 420 }}>
                           <Typography variant="body2" color="text.secondary" noWrap title={q.prompt_html || ""}>
                             {q.prompt_html ? q.prompt_html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim() : "—"}
                           </Typography>
@@ -773,7 +779,7 @@ export default function AdminExamEdit() {
                         Thêm lựa chọn
                       </Button>
                     </Stack>
-                    <RadioGroup value={mcqCorrect} onChange={(_, v) => setMcqCorrect(Number(v))}>
+                    <RadioGroup sx={{ gap: 1 }} value={mcqCorrect} onChange={(_, v) => setMcqCorrect(Number(v))}>
                       {mcqOpts.map((o, i) => (
                         <Card key={o.label} variant="outlined">
                           <CardContent sx={{ py: 1.25, "&:last-child": { pb: 1.25 } }}>
@@ -972,9 +978,9 @@ export default function AdminExamEdit() {
           {attemptsBusy && <Typography color="text.secondary">Đang tải...</Typography>}
           {!attemptsBusy && (!attempts || attempts.length === 0) && <Alert severity="info">Chưa có lượt làm bài.</Alert>}
           {!attemptsBusy && attempts && attempts.length > 0 && (
-            <Stack spacing={2}>
+            <Stack spacing={0}>
               <Grid container spacing={1.5} alignItems="center">
-                <Grid item xs={12} md={2}>
+                <Grid item xs={12} md={2} sx={{ mb: 1 }}>
                   <FormControl size="small" fullWidth>
                     <InputLabel id="flt-track">Track</InputLabel>
                     <Select labelId="flt-track" label="Track" value={filterTrack} onChange={(e) => setFilterTrack(e.target.value as any)}>
@@ -984,7 +990,7 @@ export default function AdminExamEdit() {
                     </Select>
                   </FormControl>
                 </Grid>
-                <Grid item xs={12} md={2}>
+                <Grid item xs={12} md={2} sx={{ mb: 1 }}>
                   <FormControl size="small" fullWidth>
                     <InputLabel id="flt-sub">Trạng thái</InputLabel>
                     <Select labelId="flt-sub" label="Trạng thái" value={filterSubmitted} onChange={(e) => setFilterSubmitted(e.target.value as any)}>
@@ -994,18 +1000,18 @@ export default function AdminExamEdit() {
                     </Select>
                   </FormControl>
                 </Grid>
-                <Grid item xs={12} md={3}>
+                <Grid item xs={12} md={3} sx={{ mb: 1 }}>
                   <TextField size="small" label="Tìm (email / tên)" value={filterQuery} onChange={(e) => setFilterQuery(e.target.value)} fullWidth />
                 </Grid>
-                <Grid item xs={12} md={2}>
+                <Grid item xs={12} md={2} sx={{ mb: 1 }}>
                   <TextField size="small" label="Từ ngày" type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} fullWidth InputLabelProps={{ shrink: true }} />
                 </Grid>
-                <Grid item xs={12} md={3}>
+                <Grid item xs={12} md={3} sx={{ mb: 1 }}>
                   <TextField size="small" label="Đến ngày" type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} fullWidth InputLabelProps={{ shrink: true }} />
                 </Grid>
               </Grid>
 
-              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
                 <Chip size="small" variant="outlined" label={`Kết quả: ${chartData.total}`} />
                 <Chip size="small" variant="outlined" label={`Đã nộp: ${chartData.submittedCount}`} />
                 {chartData.avgScore !== null && (
@@ -1013,7 +1019,7 @@ export default function AdminExamEdit() {
                 )}
               </Stack>
 
-              <Grid container spacing={2}>
+              <Grid container spacing={2} sx={{ mb: 1 }}>
                 <Grid item xs={12} md={6}>
                   <Card variant="outlined">
                     <CardContent>
@@ -1052,7 +1058,7 @@ export default function AdminExamEdit() {
                     <TableRow>
                       <TableCell sx={{ width: 80 }}>ID</TableCell>
                       <TableCell>Học sinh</TableCell>
-                      <TableCell sx={{ width: 110 }}>Track</TableCell>
+                      <TableCell sx={{ width: 200 }}>Track</TableCell>
                       <TableCell sx={{ width: 140 }}>Nộp</TableCell>
                       <TableCell sx={{ width: 110 }}>Điểm</TableCell>
                       <TableCell align="right" sx={{ width: 120 }}>Xem</TableCell>
@@ -1072,7 +1078,7 @@ export default function AdminExamEdit() {
                             </Typography>
                           )}
                         </TableCell>
-                        <TableCell>{trackLabel(a.track_chosen)}</TableCell>
+                        <TableCell>{parseTrackLabel(a.track_chosen as "app" | "cs" | null)}</TableCell>
                         <TableCell>
                           <Typography variant="body2" color="text.secondary">
                             {a.submitted_at ? "Đã nộp" : "Chưa nộp"}
