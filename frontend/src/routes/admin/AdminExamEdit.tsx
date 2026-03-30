@@ -54,6 +54,7 @@ import "@uiw/react-md-editor/markdown-editor.css";
 import "@uiw/react-markdown-preview/markdown.css";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
+import { useMdEditorImageUpload } from "../../lib/mdEditorImageUpload";
 import { SafeHtml } from "../../components/SafeHtml";
 
 type QuestionRow = any;
@@ -92,6 +93,8 @@ export default function AdminExamEdit() {
   const [filterTo, setFilterTo] = useState(""); // yyyy-mm-dd
   const [attemptsPage, setAttemptsPage] = useState(0);
   const [attemptsRpp, setAttemptsRpp] = useState(10);
+
+  const mdImg = useMdEditorImageUpload({ token, onError: setErr });
 
   // exam form
   const [title, setTitle] = useState("");
@@ -742,9 +745,16 @@ export default function AdminExamEdit() {
                   <Typography variant="body2" sx={{ mb: 0.5, fontWeight: 700 }}>
                     Nội dung câu hỏi
                   </Typography>
-                  <MDEditor value={promptHtml} onChange={(v) => setPromptHtml(v || "")} preview="edit" height={220} />
+                  <MDEditor
+                    value={promptHtml}
+                    onChange={(v) => setPromptHtml(v || "")}
+                    preview="edit"
+                    height={220}
+                    textareaProps={mdImg.textareaProps}
+                    extraCommands={mdImg.extraCommands}
+                  />
                   <Typography variant="caption" color="text.secondary">
-                    Hỗ trợ Markdown; nếu cần code block dùng ```cpp / ```sql / ```python.
+                    Hỗ trợ Markdown; code block: ```cpp / ```sql / ```python. Ảnh: nút upload trên thanh công cụ, paste hoặc kéo thả vào ô soạn.
                   </Typography>
                 </Box>
 
@@ -783,6 +793,8 @@ export default function AdminExamEdit() {
                                   }
                                   preview="edit"
                                   height={120}
+                                  textareaProps={mdImg.textareaProps}
+                                  extraCommands={mdImg.extraCommands}
                                 />
                               </Box>
                             </Stack>
@@ -836,6 +848,8 @@ export default function AdminExamEdit() {
                                   }
                                   preview="edit"
                                   height={120}
+                                  textareaProps={mdImg.textareaProps}
+                                  extraCommands={mdImg.extraCommands}
                                 />
                               </Box>
                             </Stack>
@@ -850,7 +864,14 @@ export default function AdminExamEdit() {
                   <Typography variant="body2" sx={{ mb: 0.5, fontWeight: 700 }}>
                     Giải thích
                   </Typography>
-                  <MDEditor value={explainHtml} onChange={(v) => setExplainHtml(v || "")} preview="edit" height={150} />
+                  <MDEditor
+                    value={explainHtml}
+                    onChange={(v) => setExplainHtml(v || "")}
+                    preview="edit"
+                    height={150}
+                    textareaProps={mdImg.textareaProps}
+                    extraCommands={mdImg.extraCommands}
+                  />
                 </Box>
               </Stack>
             </Grid>

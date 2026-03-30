@@ -10,6 +10,7 @@ import "@uiw/react-md-editor/markdown-editor.css";
 import "@uiw/react-markdown-preview/markdown.css";
 import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
+import { useMdEditorImageUpload } from "../../lib/mdEditorImageUpload";
 
 export default function AdminPosts() {
   const { token } = useAuth();
@@ -24,6 +25,8 @@ export default function AdminPosts() {
   const [content, setContent] = useState("");
   const [published, setPublished] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  const mdImg = useMdEditorImageUpload({ token, onError: setErr });
 
   async function reload() {
     if (!token) return;
@@ -210,7 +213,17 @@ export default function AdminPosts() {
               <Typography variant="body2" sx={{ mb: 0.5, fontWeight: 700 }}>
                 Nội dung (Markdown)
               </Typography>
-              <MDEditor value={content} onChange={(v) => setContent(v || "")} preview="edit" height={420} />
+              <MDEditor
+                value={content}
+                onChange={(v) => setContent(v || "")}
+                preview="edit"
+                height={420}
+                textareaProps={mdImg.textareaProps}
+                extraCommands={mdImg.extraCommands}
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+                Chèn ảnh: nút upload trên thanh công cụ, dán (paste) hoặc kéo thả ảnh vào vùng soạn thảo.
+              </Typography>
             </Box>
           </Stack>
         </DialogContent>
