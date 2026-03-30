@@ -12,6 +12,30 @@ import { api } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { useMdEditorImageUpload } from "../../lib/mdEditorImageUpload";
 
+const VI_MAP: Record<string, string> = {
+  à: "a", á: "a", ả: "a", ã: "a", ạ: "a", ằ: "a", ắ: "a", ẳ: "a", ẵ: "a", ặ: "a",
+  â: "a", ầ: "a", ấ: "a", ẩ: "a", ẫ: "a", ậ: "a",
+  è: "e", é: "e", ẻ: "e", ẽ: "e", ẹ: "e",
+  ê: "e", ề: "e", ế: "e", ể: "e", ễ: "e", ệ: "e",
+  ì: "i", í: "i", ỉ: "i", ĩ: "i", ị: "i",
+  ò: "o", ó: "o", ỏ: "o", õ: "o", ọ: "o",
+  ô: "o", ồ: "o", ố: "o", ổ: "o", ỗ: "o", ộ: "o",
+  ơ: "o", ờ: "o", ớ: "o", ở: "o", ỡ: "o", ợ: "o",
+  ù: "u", ú: "u", ủ: "u", ũ: "u", ụ: "u",
+  ư: "u", ừ: "u", ứ: "u", ử: "u", ữ: "u", ự: "u",
+  ỳ: "y", ý: "y", ỷ: "y", ỹ: "y", ỵ: "y",
+  đ: "d",
+};
+
+function slugifyFromTitle(raw: string): string {
+  let s = "";
+  for (const ch of raw.toLowerCase()) {
+    s += VI_MAP[ch] ?? ch;
+  }
+  s = s.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 255);
+  return s || "post";
+}
+
 export default function AdminPosts() {
   const { token } = useAuth();
   const [rows, setRows] = useState<any[] | null>(null);
@@ -25,6 +49,8 @@ export default function AdminPosts() {
   const [content, setContent] = useState("");
   const [published, setPublished] = useState(false);
   const [busy, setBusy] = useState(false);
+  /** Khi false (bài mới), slug bám theo tiêu đề; khi user sửa slug hoặc đang sửa bài cũ thì không ghi đè. */
+  const [slugManual, setSlugManual] = useState(false);
 
   const mdImg = useMdEditorImageUpload({ token, onError: setErr });
 
@@ -58,6 +84,7 @@ export default function AdminPosts() {
     setCoverImageUrl("");
     setContent("");
     setPublished(false);
+    setSlugManual(false);
   }
 
   return (
@@ -109,6 +136,7 @@ export default function AdminPosts() {
                             setEditingId(r.id);
                             setTitle(r.title || "");
                             setSlug(r.slug || "");
+                            setSlugManual(true);
                             setSummary(r.summary || "");
                             setCoverImageUrl(r.cover_image_url || "");
                             setContent(r.content_markdown || "");
@@ -159,8 +187,28 @@ export default function AdminPosts() {
         <DialogContent dividers sx={{ flex: 1, overflowY: "auto" }}>
           <Stack spacing={2}>
             <Stack direction={{ xs: "column", md: "row" }} spacing={1.5}>
-              <TextField fullWidth size="small" label="Tiêu đề" value={title} onChange={(e) => setTitle(e.target.value)} />
-              <TextField fullWidth size="small" label="Slug" value={slug} onChange={(e) => setSlug(e.target.value)} />
+              <TextField
+                fullWidth
+                size="small"
+                label="Tiêu đề"
+                value={title}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setTitle(v);
+                  if (!slugManual) setSlug(slugifyFromTitle(v));
+                }}
+              />
+              <TextField
+                fullWidth
+                size="small"
+                label="Slug"
+                value={slug}
+                helperText={slugManual ? undefined : "Tự động từ tiêu đề — sửa tay nếu cần"}
+                onChange={(e) => {
+                  setSlugManual(true);
+                  setSlug(e.target.value);
+                }}
+              />
             </Stack>
             <TextField size="small" label="Mô tả ngắn" value={summary} onChange={(e) => setSummary(e.target.value)} fullWidth />
             <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} alignItems={{ md: "center" }}>
