@@ -1,4 +1,26 @@
 import React, { useEffect, useMemo, useState } from "react";
+
+/** Seeded permutation of 0..n-1 — stable for same seed (e.g. per attempt + question). */
+function mcqDisplayOrder(seed: number, n: number): number[] {
+  if (n <= 1) return Array.from({ length: n }, (_, i) => i);
+  const order = Array.from({ length: n }, (_, i) => i);
+  let a = seed >>> 0;
+  const rand = () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), a | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), a | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  for (let i = n - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  return order;
+}
+
+function mcqDisplayLabel(displayIdx: number): string {
+  return displayIdx < 26 ? String.fromCharCode(65 + displayIdx) : String(displayIdx + 1);
+}
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Alert,
@@ -579,6 +601,9 @@ export default function TakeExam() {
             q={activeQ}
             value={answers[String(activeQ.id)]}
             onChange={(v) => setAnswers((a) => ({ ...a, [String(activeQ.id)]: v }))}
+            mcqShuffleSeed={
+              attemptId != null ? (attemptId * 1000003 + activeQ.id) >>> 0 : (Number(examId) * 1000003 + activeQ.id) >>> 0
+            }
           />
         ) : (
           <Alert severity="info">Không có câu hỏi.</Alert>
@@ -1201,13 +1226,20 @@ function QuestionView({
   q,
   index,
   value,
-  onChange
+  onChange,
+  mcqShuffleSeed
 }: {
   q: Q;
   index: number;
   value: any;
   onChange: (v: any) => void;
+  mcqShuffleSeed: number;
 }) {
+  const mcqOrder = useMemo(
+    () => (q.qtype === "mcq" ? mcqDisplayOrder(mcqShuffleSeed, q.options.length) : []),
+    [q, mcqShuffleSeed]
+  );
+
   return (
     <Card variant="outlined" sx={{ mr: { xs: 0, md: 3 } }}>
       <CardContent sx={{ p: { xs: 1.5, md: 2 }, pr: { xs: 2.5, md: 2 } }}>
@@ -1222,12 +1254,13 @@ function QuestionView({
           <Divider />
           {q.qtype === "mcq" ? (
             <Stack spacing={0.75} role="radiogroup" aria-label="Đáp án">
-              {q.options.map((opt, i) => {
-                const checked = value?.choiceIndex === i;
+              {mcqOrder.map((origIdx, displayIdx) => {
+                const opt = q.options[origIdx];
+                const checked = value?.choiceIndex === origIdx;
                 return (
                   <Box
-                    key={opt.label}
-                    onClick={() => onChange({ type: "mcq", choiceIndex: i })}
+                    key={origIdx}
+                    onClick={() => onChange({ type: "mcq", choiceIndex: origIdx })}
                     sx={{
                       display: "flex",
                       alignItems: "flex-start",
@@ -1238,8 +1271,11 @@ function QuestionView({
                       "&:hover": { bgcolor: "action.hover" }
                     }}
                   >
-                    <Radio checked={checked} onChange={() => onChange({ type: "mcq", choiceIndex: i })} />
-                    <Chip label={opt.label} size="small" variant="outlined" sx={{ mt: 0.5 }} />
+                    <Radio
+                      checked={checked}
+                      onChange={() => onChange({ type: "mcq", choiceIndex: origIdx })}
+                    />
+                    <Chip label={mcqDisplayLabel(displayIdx)} size="small" variant="outlined" sx={{ mt: 0.5 }} />
                     <Box sx={{ flex: 1, minWidth: 0, pt: 0.25 }}>
                       <SafeHtml html={opt.text_html} />
                     </Box>
