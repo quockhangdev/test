@@ -256,6 +256,31 @@ export default function TakeExam() {
     };
   }, [visibleQuestions, answers]);
 
+  useEffect(() => {
+    if (!attemptId) return;
+    const n = visibleQuestions.length;
+    if (n === 0) return;
+    const maxIdx = n - 1;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      const el = e.target as HTMLElement | null;
+      if (el) {
+        const tag = el.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+        if (el.isContentEditable) return;
+        if (el.closest('[role="dialog"]')) return;
+        if (el.closest('[role="menu"]')) return;
+        if (el.closest('[role="listbox"]')) return;
+        if (el.closest('[role="radiogroup"]')) return;
+      }
+      e.preventDefault();
+      if (e.key === "ArrowLeft") setActiveIdx((i) => Math.max(0, i - 1));
+      else setActiveIdx((i) => Math.min(maxIdx, i + 1));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [attemptId, visibleQuestions.length]);
+
   // restore draft after exam loaded
   useEffect(() => {
     if (loading) return;
