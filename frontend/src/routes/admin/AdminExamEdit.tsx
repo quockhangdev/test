@@ -425,7 +425,7 @@ export default function AdminExamEdit() {
               onChange={(_, v) => setExamInfoExpanded(v)}
               elevation={0}
               disableGutters
-              sx={{ border: 1, borderColor: "divider", borderRadius: 2, "&:before": { display: "none" } }}
+              sx={{ border: 1, borderColor: "divider", borderRadius: 1, "&:before": { display: "none" } }}
             >
               <AccordionSummary expandIcon={<ExpandMoreOutlinedIcon />}>
                 <Stack
@@ -591,7 +591,7 @@ export default function AdminExamEdit() {
             ) : questions.length === 0 ? (
               <Alert severity="info">Chưa có câu hỏi.</Alert>
             ) : (
-              <TableContainer sx={{ border: 1, borderColor: "divider", borderRadius: 2 }}>
+              <TableContainer sx={{ border: 1, borderColor: "divider", borderRadius: 1 }}>
                 <Table size="small" stickyHeader>
                   <TableHead>
                     <TableRow>
@@ -1161,7 +1161,7 @@ export default function AdminExamEdit() {
                 </Grid>
               </Grid>
 
-              <TableContainer sx={{ border: 1, borderColor: "divider", borderRadius: 2 }}>
+              <TableContainer sx={{ border: 1, borderColor: "divider", borderRadius: 1 }}>
                 <Table size="small" stickyHeader>
                   <TableHead>
                     <TableRow>

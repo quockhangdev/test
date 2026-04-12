@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 /** Seeded permutation of 0..n-1 — stable for same seed (e.g. per attempt + question). */
 function mcqDisplayOrder(seed: number, n: number): number[] {
@@ -52,6 +52,7 @@ import {
   Radio,
   RadioGroup,
   Select,
+  Snackbar,
   Stack,
   TablePagination,
   TextField,
@@ -181,6 +182,9 @@ export default function TakeExam() {
   const [showScoreSplash, setShowScoreSplash] = useState(false);
   const [openIncompleteSubmit, setOpenIncompleteSubmit] = useState(false);
 
+  const arrowKeyHintShownForAttemptRef = useRef<string | null>(null);
+  const [arrowKeyHintOpen, setArrowKeyHintOpen] = useState(false);
+
   const draftKey = useMemo(() => {
     if (!user?.id || !examId) return null;
     return `attempt_draft_${user.id}_${examId}`;
@@ -288,6 +292,16 @@ export default function TakeExam() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, [attemptId, visibleQuestions.length]);
+
+  useEffect(() => {
+    if (!attemptId || visibleQuestions.length <= 1) {
+      if (!attemptId) arrowKeyHintShownForAttemptRef.current = null;
+      return;
+    }
+    if (arrowKeyHintShownForAttemptRef.current === attemptId) return;
+    arrowKeyHintShownForAttemptRef.current = attemptId;
+    setArrowKeyHintOpen(true);
   }, [attemptId, visibleQuestions.length]);
 
   // restore draft after exam loaded
@@ -1086,6 +1100,35 @@ export default function TakeExam() {
               </Container>
             </Paper>
           )}
+          <Snackbar
+            open={arrowKeyHintOpen && visibleQuestions.length > 1}
+            autoHideDuration={5000}
+            onClose={() => setArrowKeyHintOpen(false)}
+            anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+            sx={{
+              right: { xs: 8, sm: 12 },
+              left: "auto",
+              bottom: { xs: "calc(88px + env(safe-area-inset-bottom, 0px))", sm: "calc(88px + env(safe-area-inset-bottom, 0px))" }
+            }}
+          >
+            <Paper
+              elevation={0}
+              sx={{
+                px: 1.25,
+                py: 0.75,
+                maxWidth: 300,
+                borderRadius: 1,
+                border: 1,
+                borderColor: "divider",
+                bgcolor: "background.default",
+                boxShadow: "none"
+              }}
+            >
+              <Typography variant="body2" sx={{ fontSize: "0.78rem", lineHeight: 1.35, color: "text.secondary" }}>
+                Bạn có thể dùng phím <strong>←</strong> <strong>→</strong> để chuyển câu.
+              </Typography>
+            </Paper>
+          </Snackbar>
         </>
       )}
 

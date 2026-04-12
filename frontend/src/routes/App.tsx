@@ -64,15 +64,19 @@ function Shell({ children }: { children: React.ReactNode }) {
           borderColor: "divider"
         }}
       >
-        <Toolbar>
-          <Container maxWidth="lg" sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+        <Toolbar variant="dense" disableGutters sx={{ minHeight: 44, px: { xs: 1, sm: 1.5 } }}>
+          <Container
+            maxWidth="lg"
+            sx={{ display: "flex", alignItems: "center", gap: { xs: 0.75, sm: 1 }, py: 0, minHeight: 44 }}
+          >
             <Box
               component={Link}
               to="/"
               sx={{
                 display: "inline-flex",
                 alignItems: "center",
-                textDecoration: "none"
+                textDecoration: "none",
+                flexShrink: 0
               }}
             >
               <Box
@@ -80,24 +84,27 @@ function Shell({ children }: { children: React.ReactNode }) {
                 src={logoUrl}
                 alt="Logo"
                 sx={{
-                  width: 36,
-                  height: 36,
+                  width: 30,
+                  height: 30,
                   borderRadius: "50%",
                   objectFit: "cover",
                   border: 1,
                   borderColor: "divider",
-                  mr: 1
+                  mr: { xs: 0.75, sm: 1 }
                 }}
               />
             </Box>
             <Typography
               component={Link}
               to="/"
-              variant="h6"
+              variant="subtitle1"
               sx={{
                 textDecoration: "none",
                 color: "text.primary",
                 fontWeight: 800,
+                fontSize: { xs: "0.9rem", sm: "0.95rem" },
+                lineHeight: 1.25,
+                letterSpacing: -0.2,
                 flexGrow: 1,
                 minWidth: 0,
                 whiteSpace: "nowrap",
@@ -109,7 +116,7 @@ function Shell({ children }: { children: React.ReactNode }) {
             </Typography>
             {/* <Chip label="Flask + SQLite API" size="small" variant="outlined" /> */}
             {loading ? (
-              <Typography variant="body2" color="text.secondary" sx={{ display: { xs: "none", sm: "block" } }}>
+              <Typography variant="caption" color="text.secondary" sx={{ display: { xs: "none", sm: "block" } }}>
                 Đang tải...
               </Typography>
             ) : (
@@ -119,29 +126,63 @@ function Shell({ children }: { children: React.ReactNode }) {
                     label={`${user.full_name || user.email} · ${user.role}`}
                     size="small"
                     variant="outlined"
-                    sx={{ display: { xs: "none", md: "inline-flex" } }}
+                    sx={{
+                      display: { xs: "none", md: "inline-flex" },
+                      height: 26,
+                      maxWidth: 200,
+                      "& .MuiChip-label": { px: 1, fontSize: "0.7rem", overflow: "hidden", textOverflow: "ellipsis" }
+                    }}
                   />
                 )}
 
                 {/* Desktop actions */}
-                <Box sx={{ display: { xs: "none", sm: "flex" }, alignItems: "center", gap: 1 }}>
+                <Box sx={{ display: { xs: "none", sm: "flex" }, alignItems: "center", gap: 0.5 }}>
                   {user ? (
                     <>
                       {user.role === "admin" && (
-                        <Button component={Link} to="/admin" variant="outlined" size="small" startIcon={<AdminPanelSettingsOutlinedIcon />}>
+                        <Button
+                          component={Link}
+                          to="/admin"
+                          variant="outlined"
+                          size="small"
+                          startIcon={<AdminPanelSettingsOutlinedIcon sx={{ fontSize: 18 }} />}
+                          sx={{ py: 0.25, minHeight: 32, fontSize: "0.8125rem" }}
+                        >
                           Admin
                         </Button>
                       )}
-                      <Button color="inherit" variant="text" size="small" onClick={logout} startIcon={<LogoutOutlinedIcon />}>
+                      <Button
+                        color="inherit"
+                        variant="text"
+                        size="small"
+                        onClick={logout}
+                        startIcon={<LogoutOutlinedIcon sx={{ fontSize: 18 }} />}
+                        sx={{ py: 0.25, minHeight: 32, fontSize: "0.8125rem" }}
+                      >
                         Đăng xuất
                       </Button>
                     </>
                   ) : (
                     <>
-                      <Button component={Link} to="/login" state={{ from: loc.pathname }} variant="outlined" size="small" startIcon={<LoginOutlinedIcon />}>
+                      <Button
+                        component={Link}
+                        to="/login"
+                        state={{ from: loc.pathname }}
+                        variant="outlined"
+                        size="small"
+                        startIcon={<LoginOutlinedIcon sx={{ fontSize: 18 }} />}
+                        sx={{ py: 0.25, minHeight: 32, fontSize: "0.8125rem" }}
+                      >
                         Đăng nhập
                       </Button>
-                      <Button component={Link} to="/register" variant="contained" size="small" startIcon={<PersonAddAltOutlinedIcon />}>
+                      <Button
+                        component={Link}
+                        to="/register"
+                        variant="contained"
+                        size="small"
+                        startIcon={<PersonAddAltOutlinedIcon sx={{ fontSize: 18 }} />}
+                        sx={{ py: 0.25, minHeight: 32, fontSize: "0.8125rem" }}
+                      >
                         Đăng ký
                       </Button>
                     </>
@@ -149,9 +190,9 @@ function Shell({ children }: { children: React.ReactNode }) {
                 </Box>
 
                 {/* Mobile menu */}
-                <Box sx={{ display: { xs: "block", sm: "none" } }}>
-                  <IconButton size="small" onClick={(e) => setMenuEl(e.currentTarget)} aria-label="menu">
-                    <MenuOutlinedIcon />
+                <Box sx={{ display: { xs: "block", sm: "none" }, ml: -0.5 }}>
+                  <IconButton size="small" onClick={(e) => setMenuEl(e.currentTarget)} aria-label="menu" sx={{ p: 0.5 }}>
+                    <MenuOutlinedIcon sx={{ fontSize: 22 }} />
                   </IconButton>
                   <Menu
                     anchorEl={menuEl}

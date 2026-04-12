@@ -133,7 +133,7 @@ export default function AdminUsers() {
               <Alert severity="info">Không có user.</Alert>
             ) : (
               <>
-                <TableContainer sx={{ border: 1, borderColor: "divider", borderRadius: 2, overflowX: "auto" }}>
+                <TableContainer sx={{ border: 1, borderColor: "divider", borderRadius: 1, overflowX: "auto" }}>
                   <Table size="small" stickyHeader sx={{ minWidth: 760 }}>
                     <TableHead>
                       <TableRow>

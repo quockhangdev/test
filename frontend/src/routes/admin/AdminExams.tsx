@@ -118,7 +118,7 @@ export default function AdminExams() {
                   <Alert severity="info">Chưa có đề.</Alert>
                 ) : (
                   <>
-                    <TableContainer sx={{ border: 1, borderColor: "divider", borderRadius: 2, overflowX: "auto" }}>
+                    <TableContainer sx={{ border: 1, borderColor: "divider", borderRadius: 1, overflowX: "auto" }}>
                       <Table size="small" stickyHeader sx={{ minWidth: 860 }}>
                         <TableHead>
                           <TableRow>

@@ -8,7 +8,13 @@ import AdminUsers from "./admin/AdminUsers";
 
 export default function Admin() {
   return (
-    <Stack spacing={2}>
+    <Stack
+      spacing={2}
+      sx={{
+        "& .MuiCard-root": { borderRadius: 1 },
+        "& .MuiTableContainer-root": { borderRadius: 1 }
+      }}
+    >
       <Routes>
         <Route path="/" element={<AdminHome />} />
         <Route path="/exams" element={<AdminExams />} />
