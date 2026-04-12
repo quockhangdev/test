@@ -12,21 +12,20 @@ from flask_jwt_extended import (
     jwt_required,
 )
 from pydantic import ValidationError
+from werkzeug.security import check_password_hash, generate_password_hash
 
-from . import db
-from .models import Attempt, BlogPost, Exam, Favorite, Question, Role, Track, User
+from .models import Attempt, Exam, Favorite, Question, Role, Track, User
+from .oidutil import parse_oid
 from .schemas import (
     AttemptStartIn,
     AttemptSubmitIn,
     AdminUserUpdateIn,
-    BlogPostUpsertIn,
     ExamUpsertIn,
     LoginIn,
     QuestionUpsertIn,
     RegisterIn,
 )
 from .security import hash_password, require_role, verify_password
-from werkzeug.security import check_password_hash, generate_password_hash
 from .utils import json_dumps, json_loads
 
 api_bp = Blueprint("api", __name__)
@@ -39,32 +38,21 @@ def _pydantic(model_cls):
         return jsonify({"error": "validation_error", "details": e.errors()}), 400
 
 
-def _slugify(s: str) -> str:
-    slug = re.sub(r"[^a-zA-Z0-9]+", "-", (s or "").strip().lower()).strip("-")
-    return slug[:255] or "post"
+def question_sort_key(q: Question):
+    return (q.part, 0 if q.track is None else 1, q.track or "", q.order_in_exam)
 
 
-def _blog_post_row(p: BlogPost, include_content: bool = False):
-    row = {
-        "id": p.id,
-        "title": p.title,
-        "slug": p.slug,
-        "summary": p.summary,
-        "cover_image_url": p.cover_image_url,
-        "is_published": p.is_published,
-        "author": {
-            "id": p.author.id,
-            "email": p.author.email,
-            "full_name": p.author.full_name,
-        }
-        if p.author
-        else None,
-        "created_at": p.created_at.isoformat() + "Z" if p.created_at else None,
-        "updated_at": p.updated_at.isoformat() + "Z" if p.updated_at else None,
-    }
-    if include_content:
-        row["content_markdown"] = p.content_markdown
-    return row
+def _sorted_questions_for_exam(exam: Exam) -> list[Question]:
+    qs = list(Question.objects(exam=exam))
+    qs.sort(key=question_sort_key)
+    return qs
+
+
+def jwt_user_id_str() -> str:
+    ident = get_jwt_identity()
+    if ident is None:
+        return ""
+    return str(ident)
 
 
 @api_bp.get("/health")
@@ -78,18 +66,17 @@ def register():
     if isinstance(payload, tuple):
         return payload
 
-    existing = User.query.filter_by(email=str(payload.email).lower()).first()
-    if existing:
+    email = str(payload.email).lower()
+    if User.objects(email=email).first():
         return jsonify({"error": "email_taken"}), 409
 
     user = User(
-        email=str(payload.email).lower(),
+        email=email,
         password_hash=hash_password(payload.password),
         full_name=payload.full_name,
         role=Role.STUDENT.value,
     )
-    db.session.add(user)
-    db.session.commit()
+    user.save()
     return jsonify({"ok": True})
 
 
@@ -99,7 +86,7 @@ def login():
     if isinstance(payload, tuple):
         return payload
 
-    user = User.query.filter_by(email=str(payload.email).lower()).first()
+    user = User.objects(email=str(payload.email).lower()).first()
     if not user or not verify_password(payload.password, user.password_hash):
         return jsonify({"error": "invalid_credentials"}), 401
 
@@ -111,7 +98,12 @@ def login():
     return jsonify(
         {
             "access_token": access_token,
-            "user": {"id": user.id, "email": user.email, "role": user.role, "full_name": user.full_name},
+            "user": {
+                "id": str(user.id),
+                "email": user.email,
+                "role": user.role,
+                "full_name": user.full_name,
+            },
         }
     )
 
@@ -119,64 +111,70 @@ def login():
 @api_bp.get("/me")
 @jwt_required()
 def me():
-    uid = int(get_jwt_identity())
-    user = User.query.get(uid)
+    uid = jwt_user_id_str()
+    user = User.objects(id=uid).first()
     if not user:
         return jsonify({"error": "not_found"}), 404
-    return jsonify({"id": user.id, "email": user.email, "role": user.role, "full_name": user.full_name})
-
-
-# -------------------- Exams (public/student) --------------------
+    return jsonify(
+        {
+            "id": str(user.id),
+            "email": user.email,
+            "role": user.role,
+            "full_name": user.full_name,
+        }
+    )
 
 
 @api_bp.get("/exams")
 @jwt_required(optional=True)
 def list_exams():
-    exams = Exam.query.filter_by(is_published=True).order_by(Exam.created_at.desc()).all()
+    exams = Exam.objects(is_published=True).order_by("-created_at")
     uid = None
     try:
         ident = get_jwt_identity()
-        uid = int(ident) if ident is not None else None
+        uid = str(ident) if ident is not None else None
     except Exception:
         uid = None
-    fav_ids = set()
+
+    fav_ids: set[str] = set()
     if uid:
-        fav_ids = {f.exam_id for f in Favorite.query.filter_by(user_id=uid).all()}
+        u = User.objects(id=uid).first()
+        if u:
+            fav_ids = {str(f.exam.id) for f in Favorite.objects(user=u).only("exam")}
+
     return jsonify(
         [
             {
-                "id": e.id,
+                "id": str(e.id),
                 "title": e.title,
                 "description": e.description,
                 "is_published": e.is_published,
                 "duration_minutes": e.duration_minutes,
                 "requires_password": bool(e.access_password_hash),
-                "tags": json_loads(e.tags_json) or [],
-                "is_favorite": (e.id in fav_ids) if uid else False,
-                "created_at": e.created_at.isoformat(),
+                "tags": e.tags or [],
+                "is_favorite": (str(e.id) in fav_ids) if uid else False,
+                "created_at": e.created_at.isoformat() if e.created_at else None,
             }
             for e in exams
         ]
     )
 
 
-@api_bp.get("/exams/<int:exam_id>")
+@api_bp.get("/exams/<exam_id>")
 @jwt_required()
-def get_exam(exam_id: int):
-    exam = Exam.query.get(exam_id)
+def get_exam(exam_id: str):
+    oid = parse_oid(exam_id)
+    if not oid:
+        return jsonify({"error": "not_found"}), 404
+    exam = Exam.objects(id=oid).first()
     if not exam or not exam.is_published:
         return jsonify({"error": "not_found"}), 404
 
-    # Trả về đề + câu hỏi nhưng KHÔNG lộ đáp án đúng
-    questions = (
-        Question.query.filter_by(exam_id=exam.id)
-        .order_by(Question.part.asc(), Question.track.asc().nullsfirst(), Question.order_in_exam.asc())
-        .all()
-    )
+    questions = _sorted_questions_for_exam(exam)
     q_out = []
     for q in questions:
         payload = {
-            "id": q.id,
+            "id": str(q.id),
             "part": q.part,
             "track": q.track,
             "qtype": q.qtype,
@@ -194,49 +192,68 @@ def get_exam(exam_id: int):
 
     return jsonify(
         {
-            "id": exam.id,
+            "id": str(exam.id),
             "title": exam.title,
             "description": exam.description,
             "duration_minutes": exam.duration_minutes,
             "requires_password": bool(exam.access_password_hash),
-            "tags": json_loads(exam.tags_json) or [],
+            "tags": exam.tags or [],
             "questions": q_out,
         }
     )
 
 
-@api_bp.post("/exams/<int:exam_id>/favorite")
+@api_bp.post("/exams/<exam_id>/favorite")
 @jwt_required()
-def favorite_exam(exam_id: int):
-    exam = Exam.query.get(exam_id)
+def favorite_exam(exam_id: str):
+    oid = parse_oid(exam_id)
+    if not oid:
+        return jsonify({"error": "not_found"}), 404
+    exam = Exam.objects(id=oid).first()
     if not exam or not exam.is_published:
         return jsonify({"error": "not_found"}), 404
-    uid = int(get_jwt_identity())
-    existing = Favorite.query.filter_by(user_id=uid, exam_id=exam_id).first()
-    if existing:
+
+    uid = jwt_user_id_str()
+    user = User.objects(id=uid).first()
+    if not user:
+        return jsonify({"error": "not_found"}), 404
+
+    if Favorite.objects(user=user, exam=exam).first():
         return jsonify({"ok": True, "is_favorite": True})
-    fav = Favorite(user_id=uid, exam_id=exam_id)
-    db.session.add(fav)
-    db.session.commit()
+
+    Favorite(user=user, exam=exam).save()
     return jsonify({"ok": True, "is_favorite": True})
 
 
-@api_bp.delete("/exams/<int:exam_id>/favorite")
+@api_bp.delete("/exams/<exam_id>/favorite")
 @jwt_required()
-def unfavorite_exam(exam_id: int):
-    uid = int(get_jwt_identity())
-    existing = Favorite.query.filter_by(user_id=uid, exam_id=exam_id).first()
+def unfavorite_exam(exam_id: str):
+    oid = parse_oid(exam_id)
+    if not oid:
+        return jsonify({"error": "not_found"}), 404
+    exam = Exam.objects(id=oid).first()
+    if not exam:
+        return jsonify({"error": "not_found"}), 404
+
+    uid = jwt_user_id_str()
+    user = User.objects(id=uid).first()
+    if not user:
+        return jsonify({"error": "not_found"}), 404
+
+    existing = Favorite.objects(user=user, exam=exam).first()
     if not existing:
         return jsonify({"ok": True, "is_favorite": False})
-    db.session.delete(existing)
-    db.session.commit()
+    existing.delete()
     return jsonify({"ok": True, "is_favorite": False})
 
 
-@api_bp.post("/exams/<int:exam_id>/attempts/start")
+@api_bp.post("/exams/<exam_id>/attempts/start")
 @jwt_required()
-def start_attempt(exam_id: int):
-    exam = Exam.query.get(exam_id)
+def start_attempt(exam_id: str):
+    oid = parse_oid(exam_id)
+    if not oid:
+        return jsonify({"error": "not_found"}), 404
+    exam = Exam.objects(id=oid).first()
     if not exam or not exam.is_published:
         return jsonify({"error": "not_found"}), 404
 
@@ -250,23 +267,26 @@ def start_attempt(exam_id: int):
         if not check_password_hash(exam.access_password_hash, payload.access_password):
             return jsonify({"error": "exam_password_invalid"}), 401
 
-    uid = int(get_jwt_identity())
+    uid = jwt_user_id_str()
+    user = User.objects(id=uid).first()
+    if not user:
+        return jsonify({"error": "not_found"}), 404
+
     now = datetime.utcnow()
     expires_at = None
     if exam.duration_minutes:
         expires_at = now + timedelta(minutes=int(exam.duration_minutes))
     attempt = Attempt(
-        user_id=uid,
-        exam_id=exam.id,
+        user=user,
+        exam=exam,
         track_chosen=payload.track_chosen,
         started_at=now,
         expires_at=expires_at,
     )
-    db.session.add(attempt)
-    db.session.commit()
+    attempt.save()
     return jsonify(
         {
-            "attempt_id": attempt.id,
+            "attempt_id": str(attempt.id),
             "track_chosen": attempt.track_chosen,
             "expires_at": (attempt.expires_at.isoformat() + "Z") if attempt.expires_at else None,
             "duration_minutes": exam.duration_minutes,
@@ -279,7 +299,7 @@ def _grade_attempt(attempt: Attempt) -> float:
     answers_map = answers.get("answers", {}) or {}
 
     total = 0.0
-    questions = Question.query.filter_by(exam_id=attempt.exam_id).all()
+    questions = _sorted_questions_for_exam(attempt.exam)
     q_by_id = {str(q.id): q for q in questions}
 
     for qid, ans in answers_map.items():
@@ -287,7 +307,6 @@ def _grade_attempt(attempt: Attempt) -> float:
         if not q:
             continue
 
-        # enforce part 2 track
         if q.part == 2 and q.track and attempt.track_chosen and q.track != attempt.track_chosen:
             continue
 
@@ -297,7 +316,6 @@ def _grade_attempt(attempt: Attempt) -> float:
             if ans.get("choiceIndex") == q.correct_index:
                 total += float(q.points)
         elif q.qtype == "tf_multi":
-            # chấm theo từng ý: mỗi ý đúng/sai = điểm chia đều
             if not isinstance(ans, dict):
                 continue
             items_ans = (ans.get("items") or {}) if isinstance(ans.get("items"), dict) else {}
@@ -319,8 +337,8 @@ def _grade_attempt(attempt: Attempt) -> float:
 
 def _attempt_public_row(a: Attempt):
     return {
-        "id": a.id,
-        "exam_id": a.exam_id,
+        "id": str(a.id),
+        "exam_id": str(a.exam.id),
         "track_chosen": a.track_chosen,
         "started_at": a.started_at.isoformat() + "Z" if a.started_at else None,
         "expires_at": (a.expires_at.isoformat() + "Z") if a.expires_at else None,
@@ -330,15 +348,10 @@ def _attempt_public_row(a: Attempt):
 
 
 def _attempt_review_payload(a: Attempt):
-    # includes correct answers (only after submit)
     answers = json_loads(a.answers_json) or {"answers": {}}
     answers_map = answers.get("answers", {}) or {}
 
-    qs = (
-        Question.query.filter_by(exam_id=a.exam_id)
-        .order_by(Question.part.asc(), Question.track.asc().nullsfirst(), Question.order_in_exam.asc())
-        .all()
-    )
+    qs = _sorted_questions_for_exam(a.exam)
 
     out_questions = []
     for q in qs:
@@ -348,7 +361,7 @@ def _attempt_review_payload(a: Attempt):
         qid = str(q.id)
         user_ans = answers_map.get(qid)
         base = {
-            "id": q.id,
+            "id": str(q.id),
             "part": q.part,
             "track": q.track,
             "qtype": q.qtype,
@@ -368,7 +381,7 @@ def _attempt_review_payload(a: Attempt):
                 earned = float(q.points)
         else:
             items = json_loads(q.options_json) or []
-            base["items"] = items  # includes is_true
+            base["items"] = items
             if isinstance(user_ans, dict):
                 items_ans = (user_ans.get("items") or {}) if isinstance(user_ans.get("items"), dict) else {}
                 if items:
@@ -390,12 +403,16 @@ def _attempt_review_payload(a: Attempt):
     }
 
 
-@api_bp.post("/attempts/<int:attempt_id>/submit")
+@api_bp.post("/attempts/<attempt_id>/submit")
 @jwt_required()
-def submit_attempt(attempt_id: int):
-    uid = int(get_jwt_identity())
-    attempt = Attempt.query.get(attempt_id)
-    if not attempt or attempt.user_id != uid:
+def submit_attempt(attempt_id: str):
+    uid = jwt_user_id_str()
+    oid = parse_oid(attempt_id)
+    if not oid:
+        return jsonify({"error": "not_found"}), 404
+
+    attempt = Attempt.objects(id=oid).first()
+    if not attempt or str(attempt.user.id) != uid:
         return jsonify({"error": "not_found"}), 404
     if attempt.submitted_at is not None:
         return jsonify({"error": "already_submitted"}), 409
@@ -410,86 +427,60 @@ def submit_attempt(attempt_id: int):
     attempt.answers_json = json_dumps({"answers": payload.answers})
     attempt.score = _grade_attempt(attempt)
     attempt.submitted_at = datetime.utcnow()
-    db.session.commit()
+    attempt.save()
     return jsonify({"score": attempt.score})
 
 
-@api_bp.get("/exams/<int:exam_id>/attempts")
+@api_bp.get("/exams/<exam_id>/attempts")
 @jwt_required()
-def list_my_attempts(exam_id: int):
-    uid = int(get_jwt_identity())
-    rows = (
-        Attempt.query.filter_by(user_id=uid, exam_id=exam_id)
-        .order_by(Attempt.started_at.desc())
-        .all()
-    )
+def list_my_attempts(exam_id: str):
+    eid = parse_oid(exam_id)
+    if not eid:
+        return jsonify({"error": "not_found"}), 404
+    exam = Exam.objects(id=eid).first()
+    if not exam:
+        return jsonify({"error": "not_found"}), 404
+
+    uid = jwt_user_id_str()
+    user = User.objects(id=uid).first()
+    if not user:
+        return jsonify({"error": "not_found"}), 404
+
+    rows = Attempt.objects(user=user, exam=exam).order_by("-started_at")
     return jsonify([_attempt_public_row(a) for a in rows])
 
 
-@api_bp.get("/attempts/<int:attempt_id>")
+@api_bp.get("/attempts/<attempt_id>")
 @jwt_required()
-def get_attempt_detail(attempt_id: int):
-    uid = int(get_jwt_identity())
-    a = Attempt.query.get(attempt_id)
-    if not a or a.user_id != uid:
+def get_attempt_detail(attempt_id: str):
+    uid = jwt_user_id_str()
+    oid = parse_oid(attempt_id)
+    if not oid:
+        return jsonify({"error": "not_found"}), 404
+    a = Attempt.objects(id=oid).first()
+    if not a or str(a.user.id) != uid:
         return jsonify({"error": "not_found"}), 404
     if a.submitted_at is None:
         return jsonify({**_attempt_public_row(a), "submitted": False}), 200
     return jsonify({**_attempt_review_payload(a), "submitted": True})
 
 
-# -------------------- Blog (authenticated readers) --------------------
-
-
-@api_bp.get("/posts")
-@jwt_required()
-def list_posts():
-    rows = (
-        BlogPost.query.filter_by(is_published=True)
-        .order_by(BlogPost.created_at.desc())
-        .all()
-    )
-    return jsonify([_blog_post_row(p, include_content=False) for p in rows])
-
-
-@api_bp.get("/posts/<string:slug_or_id>")
-@jwt_required()
-def get_post(slug_or_id: str):
-    uid = int(get_jwt_identity())
-    u = User.query.get(uid)
-    is_admin = bool(u and u.role == Role.ADMIN.value)
-
-    q = None
-    if slug_or_id.isdigit():
-        q = BlogPost.query.get(int(slug_or_id))
-    if not q:
-        q = BlogPost.query.filter_by(slug=slug_or_id).first()
-    if not q:
-        return jsonify({"error": "not_found"}), 404
-    if not q.is_published and not is_admin:
-        return jsonify({"error": "not_found"}), 404
-    return jsonify(_blog_post_row(q, include_content=True))
-
-
-# -------------------- Admin: CRUD exams/questions --------------------
-
-
 @api_bp.get("/admin/exams")
 @require_role(Role.ADMIN.value)
 def admin_list_exams():
-    exams = Exam.query.order_by(Exam.created_at.desc()).all()
+    exams = Exam.objects.order_by("-created_at")
     return jsonify(
         [
             {
-                "id": e.id,
+                "id": str(e.id),
                 "title": e.title,
                 "description": e.description,
                 "is_published": e.is_published,
                 "duration_minutes": e.duration_minutes,
                 "requires_password": bool(e.access_password_hash),
-                "tags": json_loads(e.tags_json) or [],
-                "created_at": e.created_at.isoformat(),
-                "updated_at": e.updated_at.isoformat(),
+                "tags": e.tags or [],
+                "created_at": e.created_at.isoformat() if e.created_at else None,
+                "updated_at": e.updated_at.isoformat() if e.updated_at else None,
             }
             for e in exams
         ]
@@ -507,25 +498,29 @@ def admin_create_exam():
     if payload.access_password is not None:
         if payload.access_password.strip() != "":
             pw_hash = generate_password_hash(payload.access_password)
+    tags = [t.strip() for t in (payload.tags or []) if t and str(t).strip()][:20]
     exam = Exam(
         title=payload.title,
         description=payload.description,
         is_published=payload.is_published,
         duration_minutes=payload.duration_minutes,
         access_password_hash=pw_hash,
-        tags_json=json_dumps(payload.tags or []),
+        tags=tags,
     )
-    db.session.add(exam)
-    db.session.commit()
-    return jsonify({"id": exam.id})
+    exam.save()
+    return jsonify({"id": str(exam.id)})
 
 
-@api_bp.put("/admin/exams/<int:exam_id>")
+@api_bp.put("/admin/exams/<exam_id>")
 @require_role(Role.ADMIN.value)
-def admin_update_exam(exam_id: int):
-    exam = Exam.query.get(exam_id)
+def admin_update_exam(exam_id: str):
+    oid = parse_oid(exam_id)
+    if not oid:
+        return jsonify({"error": "not_found"}), 404
+    exam = Exam.objects(id=oid).first()
     if not exam:
         return jsonify({"error": "not_found"}), 404
+
     payload = _pydantic(ExamUpsertIn)
     if isinstance(payload, tuple):
         return payload
@@ -534,55 +529,50 @@ def admin_update_exam(exam_id: int):
     exam.description = payload.description
     exam.is_published = payload.is_published
     exam.duration_minutes = payload.duration_minutes
-    exam.tags_json = json_dumps(payload.tags or [])
+    exam.tags = [t.strip() for t in (payload.tags or []) if t and str(t).strip()][:20]
     if payload.access_password is not None:
         if payload.access_password.strip() == "":
             exam.access_password_hash = None
         else:
             exam.access_password_hash = generate_password_hash(payload.access_password)
-    db.session.commit()
+    exam.updated_at = datetime.utcnow()
+    exam.save()
     return jsonify({"ok": True})
 
 
-@api_bp.delete("/admin/exams/<int:exam_id>")
+@api_bp.delete("/admin/exams/<exam_id>")
 @require_role(Role.ADMIN.value)
-def admin_delete_exam(exam_id: int):
-    exam = Exam.query.get(exam_id)
+def admin_delete_exam(exam_id: str):
+    oid = parse_oid(exam_id)
+    if not oid:
+        return jsonify({"error": "not_found"}), 404
+    exam = Exam.objects(id=oid).first()
     if not exam:
         return jsonify({"error": "not_found"}), 404
 
-    # If DB enforces FK constraints, deleting exam can fail when there are related rows
-    # (e.g. attempts / favorites). We delete dependents explicitly first.
     try:
-        Attempt.query.filter_by(exam_id=exam_id).delete(synchronize_session=False)
-        Favorite.query.filter_by(exam_id=exam_id).delete(synchronize_session=False)
-        Question.query.filter_by(exam_id=exam_id).delete(synchronize_session=False)
-        # Ensure dependent deletes are applied before deleting parent (helps with FK enforcement)
-        db.session.flush()
-        db.session.delete(exam)
-        db.session.flush()
-        db.session.commit()
+        # MongoEngine đã đăng ký CASCADE từ Question / Attempt / Favorite → Exam; chỉ cần xoá Exam.
+        exam.delete()
         return jsonify({"ok": True})
     except Exception as e:
-        db.session.rollback()
         return jsonify({"error": "delete_failed", "details": str(e)}), 500
 
 
-@api_bp.get("/admin/exams/<int:exam_id>/questions")
+@api_bp.get("/admin/exams/<exam_id>/questions")
 @require_role(Role.ADMIN.value)
-def admin_list_questions(exam_id: int):
-    exam = Exam.query.get(exam_id)
+def admin_list_questions(exam_id: str):
+    oid = parse_oid(exam_id)
+    if not oid:
+        return jsonify({"error": "not_found"}), 404
+    exam = Exam.objects(id=oid).first()
     if not exam:
         return jsonify({"error": "not_found"}), 404
-    questions = (
-        Question.query.filter_by(exam_id=exam_id)
-        .order_by(Question.part.asc(), Question.track.asc().nullsfirst(), Question.order_in_exam.asc())
-        .all()
-    )
+
+    questions = _sorted_questions_for_exam(exam)
     out = []
     for q in questions:
         row = {
-            "id": q.id,
+            "id": str(q.id),
             "part": q.part,
             "track": q.track,
             "qtype": q.qtype,
@@ -600,10 +590,13 @@ def admin_list_questions(exam_id: int):
     return jsonify(out)
 
 
-@api_bp.post("/admin/exams/<int:exam_id>/questions")
+@api_bp.post("/admin/exams/<exam_id>/questions")
 @require_role(Role.ADMIN.value)
-def admin_create_question(exam_id: int):
-    exam = Exam.query.get(exam_id)
+def admin_create_question(exam_id: str):
+    oid = parse_oid(exam_id)
+    if not oid:
+        return jsonify({"error": "not_found"}), 404
+    exam = Exam.objects(id=oid).first()
     if not exam:
         return jsonify({"error": "not_found"}), 404
 
@@ -613,9 +606,6 @@ def admin_create_question(exam_id: int):
 
     if payload.part == 1 and payload.track is not None:
         return jsonify({"error": "part1_track_must_be_null"}), 400
-    # part 2 can be either:
-    # - 2.1: track = None (câu hỏi chung)
-    # - 2.2: track = app/cs (câu hỏi theo chủ đề)
     if payload.part == 2 and payload.track is not None and payload.track not in (Track.APP.value, Track.CS.value):
         return jsonify({"error": "invalid_track"}), 400
 
@@ -637,7 +627,7 @@ def admin_create_question(exam_id: int):
         correct_index = None
 
     q = Question(
-        exam_id=exam_id,
+        exam=exam,
         part=payload.part,
         track=payload.track,
         qtype=payload.qtype,
@@ -648,15 +638,17 @@ def admin_create_question(exam_id: int):
         points=payload.points,
         order_in_exam=payload.order_in_exam,
     )
-    db.session.add(q)
-    db.session.commit()
-    return jsonify({"id": q.id})
+    q.save()
+    return jsonify({"id": str(q.id)})
 
 
-@api_bp.put("/admin/questions/<int:question_id>")
+@api_bp.put("/admin/questions/<question_id>")
 @require_role(Role.ADMIN.value)
-def admin_update_question(question_id: int):
-    q = Question.query.get(question_id)
+def admin_update_question(question_id: str):
+    oid = parse_oid(question_id)
+    if not oid:
+        return jsonify({"error": "not_found"}), 404
+    q = Question.objects(id=oid).first()
     if not q:
         return jsonify({"error": "not_found"}), 404
 
@@ -666,9 +658,6 @@ def admin_update_question(question_id: int):
 
     if payload.part == 1 and payload.track is not None:
         return jsonify({"error": "part1_track_must_be_null"}), 400
-    # part 2 can be either:
-    # - 2.1: track = None (câu hỏi chung)
-    # - 2.2: track = app/cs (câu hỏi theo chủ đề)
     if payload.part == 2 and payload.track is not None and payload.track not in (Track.APP.value, Track.CS.value):
         return jsonify({"error": "invalid_track"}), 400
 
@@ -696,125 +685,70 @@ def admin_update_question(question_id: int):
     q.explanation_html = payload.explanation_html
     q.points = payload.points
     q.order_in_exam = payload.order_in_exam
-
-    db.session.commit()
+    q.save()
     return jsonify({"ok": True})
 
 
-@api_bp.delete("/admin/questions/<int:question_id>")
+@api_bp.delete("/admin/questions/<question_id>")
 @require_role(Role.ADMIN.value)
-def admin_delete_question(question_id: int):
-    q = Question.query.get(question_id)
+def admin_delete_question(question_id: str):
+    oid = parse_oid(question_id)
+    if not oid:
+        return jsonify({"error": "not_found"}), 404
+    q = Question.objects(id=oid).first()
     if not q:
         return jsonify({"error": "not_found"}), 404
-    db.session.delete(q)
-    db.session.commit()
+    q.delete()
     return jsonify({"ok": True})
 
 
 @api_bp.get("/admin/attempts")
 @require_role(Role.ADMIN.value)
 def admin_list_attempts():
-    exam_id = request.args.get("exam_id", type=int)
-    user_id = request.args.get("user_id", type=int)
+    exam_id_raw = request.args.get("exam_id")
+    user_id_raw = request.args.get("user_id")
 
-    q = Attempt.query
-    if exam_id:
-        q = q.filter(Attempt.exam_id == exam_id)
-    if user_id:
-        q = q.filter(Attempt.user_id == user_id)
+    q = Attempt.objects
+    if exam_id_raw:
+        eoid = parse_oid(exam_id_raw)
+        if eoid:
+            ex = Exam.objects(id=eoid).first()
+            if ex:
+                q = q.filter(exam=ex)
+    if user_id_raw:
+        uoid = parse_oid(user_id_raw)
+        if uoid:
+            u = User.objects(id=uoid).first()
+            if u:
+                q = q.filter(user=u)
 
-    rows = q.order_by(Attempt.started_at.desc()).all()
+    rows = q.order_by("-started_at")
     out = []
     for a in rows:
-        u = User.query.get(a.user_id)
-        out.append({**_attempt_public_row(a), "user": {"id": u.id, "email": u.email, "full_name": u.full_name} if u else None})
+        u = a.user
+        out.append(
+            {
+                **_attempt_public_row(a),
+                "user": {"id": str(u.id), "email": u.email, "full_name": u.full_name} if u else None,
+            }
+        )
     return jsonify(out)
 
 
-@api_bp.get("/admin/attempts/<int:attempt_id>")
+@api_bp.get("/admin/attempts/<attempt_id>")
 @require_role(Role.ADMIN.value)
-def admin_get_attempt_detail(attempt_id: int):
-    a = Attempt.query.get(attempt_id)
+def admin_get_attempt_detail(attempt_id: str):
+    oid = parse_oid(attempt_id)
+    if not oid:
+        return jsonify({"error": "not_found"}), 404
+    a = Attempt.objects(id=oid).first()
     if not a:
         return jsonify({"error": "not_found"}), 404
+    u = a.user
+    user_row = {"id": str(u.id), "email": u.email, "full_name": u.full_name} if u else None
     if a.submitted_at is None:
-        return jsonify({**_attempt_public_row(a), "submitted": False}), 200
-    u = User.query.get(a.user_id)
-    return jsonify({**_attempt_review_payload(a), "submitted": True, "user": {"id": u.id, "email": u.email, "full_name": u.full_name} if u else None})
-
-
-# -------------------- Admin: Blog --------------------
-
-
-@api_bp.get("/admin/posts")
-@require_role(Role.ADMIN.value)
-def admin_list_posts():
-    rows = BlogPost.query.order_by(BlogPost.created_at.desc()).all()
-    return jsonify([_blog_post_row(p, include_content=True) for p in rows])
-
-
-@api_bp.post("/admin/posts")
-@require_role(Role.ADMIN.value)
-def admin_create_post():
-    payload = _pydantic(BlogPostUpsertIn)
-    if isinstance(payload, tuple):
-        return payload
-
-    slug = _slugify(payload.slug)
-    if BlogPost.query.filter_by(slug=slug).first():
-        return jsonify({"error": "slug_taken"}), 409
-
-    uid = int(get_jwt_identity())
-    p = BlogPost(
-        title=payload.title.strip(),
-        slug=slug,
-        summary=(payload.summary or "").strip() or None,
-        content_markdown=payload.content_markdown or "",
-        cover_image_url=(payload.cover_image_url or "").strip() or None,
-        is_published=payload.is_published,
-        author_id=uid,
-    )
-    db.session.add(p)
-    db.session.commit()
-    return jsonify({"id": p.id})
-
-
-@api_bp.put("/admin/posts/<int:post_id>")
-@require_role(Role.ADMIN.value)
-def admin_update_post(post_id: int):
-    p = BlogPost.query.get(post_id)
-    if not p:
-        return jsonify({"error": "not_found"}), 404
-
-    payload = _pydantic(BlogPostUpsertIn)
-    if isinstance(payload, tuple):
-        return payload
-
-    slug = _slugify(payload.slug)
-    existing = BlogPost.query.filter(BlogPost.slug == slug, BlogPost.id != post_id).first()
-    if existing:
-        return jsonify({"error": "slug_taken"}), 409
-
-    p.title = payload.title.strip()
-    p.slug = slug
-    p.summary = (payload.summary or "").strip() or None
-    p.content_markdown = payload.content_markdown or ""
-    p.cover_image_url = (payload.cover_image_url or "").strip() or None
-    p.is_published = payload.is_published
-    db.session.commit()
-    return jsonify({"ok": True})
-
-
-@api_bp.delete("/admin/posts/<int:post_id>")
-@require_role(Role.ADMIN.value)
-def admin_delete_post(post_id: int):
-    p = BlogPost.query.get(post_id)
-    if not p:
-        return jsonify({"error": "not_found"}), 404
-    db.session.delete(p)
-    db.session.commit()
-    return jsonify({"ok": True})
+        return jsonify({**_attempt_public_row(a), "submitted": False, "user": user_row}), 200
+    return jsonify({**_attempt_review_payload(a), "submitted": True, "user": user_row})
 
 
 @api_bp.post("/admin/uploads/image")
@@ -839,12 +773,9 @@ def admin_upload_image():
     return jsonify({"url": url})
 
 
-# -------------------- Admin: Users --------------------
-
-
 def _user_public_row(u: User):
     return {
-        "id": u.id,
+        "id": str(u.id),
         "email": u.email,
         "full_name": u.full_name,
         "role": u.role,
@@ -856,31 +787,40 @@ def _user_public_row(u: User):
 @require_role(Role.ADMIN.value)
 def admin_list_users():
     q = (request.args.get("q") or "").strip().lower()
-    query = User.query
     if q:
-        like = f"%{q}%"
-        query = query.filter((User.email.ilike(like)) | (User.full_name.ilike(like)))
-    rows = query.order_by(User.created_at.desc()).all()
+        rows = User.objects(
+            __raw__={
+                "$or": [
+                    {"email": {"$regex": re.escape(q), "$options": "i"}},
+                    {"full_name": {"$regex": re.escape(q), "$options": "i"}},
+                ]
+            }
+        ).order_by("-created_at")
+    else:
+        rows = User.objects.order_by("-created_at")
     return jsonify([_user_public_row(u) for u in rows])
 
 
-@api_bp.patch("/admin/users/<int:user_id>")
+@api_bp.patch("/admin/users/<user_id>")
 @require_role(Role.ADMIN.value)
-def admin_update_user(user_id: int):
+def admin_update_user(user_id: str):
     payload = _pydantic(AdminUserUpdateIn)
     if isinstance(payload, tuple):
         return payload
 
-    uid = int(get_jwt_identity())
-    target = User.query.get(user_id)
+    uid = jwt_user_id_str()
+    oid = parse_oid(user_id)
+    if not oid:
+        return jsonify({"error": "not_found"}), 404
+    target = User.objects(id=oid).first()
     if not target:
         return jsonify({"error": "not_found"}), 404
 
-    if payload.role is not None and target.id == uid and payload.role != Role.ADMIN.value:
+    if payload.role is not None and str(target.id) == uid and payload.role != Role.ADMIN.value:
         return jsonify({"error": "cannot_demote_self"}), 400
 
     if payload.role is not None and target.role == Role.ADMIN.value and payload.role != Role.ADMIN.value:
-        admins = User.query.filter_by(role=Role.ADMIN.value).count()
+        admins = User.objects(role=Role.ADMIN.value).count()
         if admins <= 1:
             return jsonify({"error": "cannot_remove_last_admin"}), 400
         target.role = payload.role
@@ -891,27 +831,31 @@ def admin_update_user(user_id: int):
     if payload.password is not None:
         target.password_hash = hash_password(payload.password)
 
-    db.session.commit()
+    target.save()
     return jsonify({"ok": True, "user": _user_public_row(target)})
 
 
-@api_bp.delete("/admin/users/<int:user_id>")
+@api_bp.delete("/admin/users/<user_id>")
 @require_role(Role.ADMIN.value)
-def admin_delete_user(user_id: int):
-    uid = int(get_jwt_identity())
-    if user_id == uid:
+def admin_delete_user(user_id: str):
+    uid = jwt_user_id_str()
+    oid = parse_oid(user_id)
+    if not oid:
+        return jsonify({"error": "not_found"}), 404
+
+    if str(oid) == uid:
         return jsonify({"error": "cannot_delete_self"}), 400
 
-    u = User.query.get(user_id)
+    u = User.objects(id=oid).first()
     if not u:
         return jsonify({"error": "not_found"}), 404
 
     if u.role == Role.ADMIN.value:
-        admins = User.query.filter_by(role=Role.ADMIN.value).count()
+        admins = User.objects(role=Role.ADMIN.value).count()
         if admins <= 1:
             return jsonify({"error": "cannot_delete_last_admin"}), 400
 
-    db.session.delete(u)
-    db.session.commit()
+    Attempt.objects(user=u).delete()
+    Favorite.objects(user=u).delete()
+    u.delete()
     return jsonify({"ok": True})
-

@@ -20,53 +20,26 @@ import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import TimerOutlinedIcon from "@mui/icons-material/TimerOutlined";
 import StarBorderOutlinedIcon from "@mui/icons-material/StarBorderOutlined";
 import StarOutlinedIcon from "@mui/icons-material/StarOutlined";
+import Avatar from "boring-avatars";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 
-const PLACEWAIFU_SIZE = 88;
+const AVATAR_SIZE = 44;
 
-function ExamCardThumb({ examId }: { examId: number }) {
-  const [failed, setFailed] = useState(false);
-
-  if (failed) {
-    return (
-      <Box
-        sx={{
-          width: { xs: 40, sm: 44 },
-          height: { xs: 40, sm: 44 },
-          borderRadius: 2,
-          bgcolor: "primary.main",
-          color: "primary.contrastText",
-          display: "grid",
-          placeItems: "center",
-          flex: "0 0 auto",
-          fontWeight: 900
-        }}
-      >
-        {String(examId).slice(-2)}
-      </Box>
-    );
-  }
-
+function ExamCardThumb({ examId }: { examId: string }) {
   return (
     <Box
-      component="img"
-      src={`https://placewaifu.com/image/${PLACEWAIFU_SIZE}?v=${examId}`}
-      alt=""
-      loading="lazy"
-      decoding="async"
-      referrerPolicy="no-referrer"
-      onError={() => setFailed(true)}
       sx={{
-        width: { xs: 40, sm: 44 },
-        height: { xs: 40, sm: 44 },
+        width: AVATAR_SIZE,
+        height: AVATAR_SIZE,
         borderRadius: 2,
         flex: "0 0 auto",
-        objectFit: "cover",
-        display: "block",
+        overflow: "hidden",
         bgcolor: "action.hover"
       }}
-    />
+    >
+      <Avatar name={`exam-${examId}`} size={AVATAR_SIZE} variant="beam" />
+    </Box>
   );
 }
 
@@ -74,7 +47,7 @@ export default function Home() {
   const { user, token } = useAuth();
   const [exams, setExams] = useState<
     Array<{
-      id: number;
+      id: string;
       title: string;
       description: string | null;
       duration_minutes: number | null;
@@ -263,4 +236,3 @@ export default function Home() {
     </Stack>
   );
 }
-

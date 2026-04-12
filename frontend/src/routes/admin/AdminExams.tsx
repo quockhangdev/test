@@ -255,7 +255,7 @@ export default function AdminExams() {
               fullWidth
             />
             <TextField
-              label="Password đề (để trống nếu không cần)"
+              label="Mật khẩu (để trống nếu không cần)"
               type="password"
               value={accessPassword}
               onChange={(e) => setAccessPassword(e.target.value)}

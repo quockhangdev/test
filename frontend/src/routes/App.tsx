@@ -19,7 +19,6 @@ import PersonAddAltOutlinedIcon from "@mui/icons-material/PersonAddAltOutlined";
 import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined";
 import AdminPanelSettingsOutlinedIcon from "@mui/icons-material/AdminPanelSettingsOutlined";
 import MenuOutlinedIcon from "@mui/icons-material/MenuOutlined";
-import ArticleOutlinedIcon from "@mui/icons-material/ArticleOutlined";
 import { AuthProvider, useAuth } from "../lib/auth";
 import { ExamTakingLayoutProvider, useExamTakingLayout } from "../lib/examTakingLayout";
 import Home from "./Home";
@@ -27,8 +26,6 @@ import Login from "./Login";
 import Register from "./Register";
 import TakeExam from "./TakeExam";
 import Admin from "./Admin";
-import Posts from "./Posts";
-import PostDetail from "./PostDetail";
 
 function Shell({ children }: { children: React.ReactNode }) {
   const { user, loading, logout } = useAuth();
@@ -130,9 +127,6 @@ function Shell({ children }: { children: React.ReactNode }) {
                 <Box sx={{ display: { xs: "none", sm: "flex" }, alignItems: "center", gap: 1 }}>
                   {user ? (
                     <>
-                      <Button component={Link} to="/posts" variant="outlined" size="small" startIcon={<ArticleOutlinedIcon />}>
-                        Bài viết
-                      </Button>
                       {user.role === "admin" && (
                         <Button component={Link} to="/admin" variant="outlined" size="small" startIcon={<AdminPanelSettingsOutlinedIcon />}>
                           Admin
@@ -188,12 +182,6 @@ function Shell({ children }: { children: React.ReactNode }) {
                         {it.label}
                       </MenuItem>
                     ))}
-                    {user && (
-                      <MenuItem component={Link} to="/posts" onClick={() => setMenuEl(null)} sx={{ gap: 1 }}>
-                        <ArticleOutlinedIcon fontSize="small" />
-                        Bài viết
-                      </MenuItem>
-                    )}
                   </Menu>
                 </Box>
               </>
@@ -263,22 +251,6 @@ export default function App() {
             element={
               <RequireAuth>
                 <TakeExam />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/posts"
-            element={
-              <RequireAuth>
-                <Posts />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/posts/:slug"
-            element={
-              <RequireAuth>
-                <PostDetail />
               </RequireAuth>
             }
           />

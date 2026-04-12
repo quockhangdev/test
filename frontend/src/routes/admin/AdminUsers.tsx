@@ -249,7 +249,7 @@ export default function AdminUsers() {
               <Box>
                 <TextField
                   size="small"
-                  label="Reset mật khẩu (tuỳ chọn)"
+                  label="Đổi mật khẩu"
                   type="password"
                   value={resetPassword}
                   onChange={(e) => setResetPassword(e.target.value)}
@@ -277,7 +277,7 @@ export default function AdminUsers() {
                   role: editRole,
                 };
                 if (resetPassword.trim() !== "") body.password = resetPassword;
-                const res = await api.admin.updateUser(token, Number(editing.id), body);
+                const res = await api.admin.updateUser(token, editing.id, body);
                 setRows((prev) => (prev ? prev.map((x) => (x.id === res.user.id ? res.user : x)) : prev));
                 setOpenEdit(false);
               } catch (e: any) {
@@ -315,7 +315,7 @@ export default function AdminUsers() {
               if (!token || !deleting) return;
               setErr(null);
               try {
-                await api.admin.deleteUser(token, Number(deleting.id));
+                await api.admin.deleteUser(token, deleting.id);
                 setRows((prev) => (prev ? prev.filter((x) => x.id !== deleting.id) : prev));
                 setOpenDelete(false);
               } catch (e: any) {

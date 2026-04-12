@@ -5,7 +5,6 @@ import AdminHome from "./admin/AdminHome";
 import AdminExams from "./admin/AdminExams";
 import AdminExamEdit from "./admin/AdminExamEdit";
 import AdminUsers from "./admin/AdminUsers";
-import AdminPosts from "./admin/AdminPosts";
 
 export default function Admin() {
   return (
@@ -14,7 +13,6 @@ export default function Admin() {
         <Route path="/" element={<AdminHome />} />
         <Route path="/exams" element={<AdminExams />} />
         <Route path="/exams/:examId" element={<AdminExamEdit />} />
-        <Route path="/posts" element={<AdminPosts />} />
         <Route path="/users" element={<AdminUsers />} />
       </Routes>
     </Stack>

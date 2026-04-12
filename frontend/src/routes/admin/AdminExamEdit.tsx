@@ -38,6 +38,7 @@ import {
   Tooltip,
   Typography
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import { BarChart, LineChart } from "@mui/x-charts";
 import ArrowBackOutlinedIcon from "@mui/icons-material/ArrowBackOutlined";
 import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
@@ -53,8 +54,10 @@ import MDEditor from "@uiw/react-md-editor";
 import "@uiw/react-md-editor/markdown-editor.css";
 import "@uiw/react-markdown-preview/markdown.css";
 import { api } from "../../lib/api";
+import { formatAttemptDateTime } from "../../lib/attemptUi";
 import { useAuth } from "../../lib/auth";
 import { useMdEditorImageUpload } from "../../lib/mdEditorImageUpload";
+import { mdEditorMathPreviewOptions } from "../../lib/markdownMath";
 import { SafeHtml } from "../../components/SafeHtml";
 
 type QuestionRow = any;
@@ -75,6 +78,15 @@ function parseTrackLabel(t: "app" | "cs" | null): string {
   return "Chung";
 }
 
+type QuestionPreviewSnap = {
+  prompt_html: string;
+  qtype: "mcq" | "tf_multi";
+  options?: Array<{ label: string; text_html: string }>;
+  correct_index?: number;
+  items?: Array<{ label: string; text_html: string; is_true: boolean }>;
+  explanation_html?: string | null;
+};
+
 export default function AdminExamEdit() {
   const { examId } = useParams();
   const { token } = useAuth();
@@ -83,9 +95,9 @@ export default function AdminExamEdit() {
   const [questions, setQuestions] = useState<QuestionRow[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [openAddQuestion, setOpenAddQuestion] = useState(false);
-  const [editingQuestionId, setEditingQuestionId] = useState<number | null>(null);
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [openPreview, setOpenPreview] = useState(false);
-  const [previewHtml, setPreviewHtml] = useState<string>("");
+  const [previewSnap, setPreviewSnap] = useState<QuestionPreviewSnap | null>(null);
   const [examInfoExpanded, setExamInfoExpanded] = useState(false);
   const [openAttempts, setOpenAttempts] = useState(false);
   const [attempts, setAttempts] = useState<any[] | null>(null);
@@ -185,7 +197,7 @@ export default function AdminExamEdit() {
       setAccessPassword("");
       setTagsText(Array.isArray(ex.tags) ? ex.tags.join(", ") : "");
     }
-    const qs = await api.admin.listQuestions(token, Number(examId));
+    const qs = await api.admin.listQuestions(token, examId!);
     setQuestions(qs);
   }
 
@@ -391,7 +403,7 @@ export default function AdminExamEdit() {
                       setFilterQuery("");
                       setFilterFrom("");
                       setFilterTo("");
-                      const rows = await api.admin.listAttempts(token!, { exam_id: Number(examId) });
+                      const rows = await api.admin.listAttempts(token!, { exam_id: examId! });
                       setAttempts(rows);
                     } catch (e: any) {
                       setErr(e?.message || "attempts_failed");
@@ -533,7 +545,7 @@ export default function AdminExamEdit() {
                         onClick={async () => {
                           try {
                             setErr(null);
-                            await api.admin.updateExam(token!, Number(examId), {
+                            await api.admin.updateExam(token!, examId!, {
                               title: title.trim(),
                               description: description.trim() || null,
                               is_published: published,
@@ -625,7 +637,15 @@ export default function AdminExamEdit() {
                               <IconButton
                                 size="small"
                                 onClick={() => {
-                                  setPreviewHtml(q.prompt_html || "");
+                                  const qt = (q.qtype as "mcq" | "tf_multi") || "mcq";
+                                  setPreviewSnap({
+                                    prompt_html: q.prompt_html || "",
+                                    qtype: qt,
+                                    options: qt === "mcq" ? q.options : undefined,
+                                    correct_index: qt === "mcq" ? q.correct_index : undefined,
+                                    items: qt === "tf_multi" ? q.items : undefined,
+                                    explanation_html: q.explanation_html ?? null
+                                  });
                                   setOpenPreview(true);
                                 }}
                               >
@@ -636,7 +656,7 @@ export default function AdminExamEdit() {
                               <IconButton
                                 size="small"
                                 onClick={() => {
-                                  setEditingQuestionId(Number(q.id));
+                                  setEditingQuestionId(String(q.id));
                                   loadQuestionIntoBuilder(q);
                                   setOpenAddQuestion(true);
                                 }}
@@ -675,7 +695,10 @@ export default function AdminExamEdit() {
 
       <Dialog
         open={openPreview}
-        onClose={() => setOpenPreview(false)}
+        onClose={() => {
+          setOpenPreview(false);
+          setPreviewSnap(null);
+        }}
         fullWidth
         maxWidth="md"
       >
@@ -688,7 +711,89 @@ export default function AdminExamEdit() {
           </Stack>
         </DialogTitle>
         <DialogContent dividers>
-          <SafeHtml html={previewHtml || "<p>(trống)</p>"} />
+          {previewSnap ? (
+            <Stack spacing={2}>
+              <Typography variant="overline" color="text.secondary" letterSpacing={1}>
+                Đề bài
+              </Typography>
+              <SafeHtml html={previewSnap.prompt_html?.trim() ? previewSnap.prompt_html : "<p>(trống)</p>"} />
+
+              {previewSnap.qtype === "mcq" && Array.isArray(previewSnap.options) && previewSnap.options.length > 0 ? (
+                <>
+                  <Divider />
+                  <Typography variant="overline" color="text.secondary" letterSpacing={1}>
+                    Đáp án (trắc nghiệm)
+                  </Typography>
+                  <Stack spacing={1.25}>
+                    {previewSnap.options.map((o, i) => {
+                      const isCorrect = i === previewSnap.correct_index;
+                      return (
+                        <Card
+                          key={`${o.label}-${i}`}
+                          variant="outlined"
+                          sx={(theme) => ({
+                            borderColor: isCorrect ? "success.main" : "divider",
+                            borderWidth: isCorrect ? 2 : 1,
+                            bgcolor: isCorrect ? alpha(theme.palette.success.main, 0.08) : undefined
+                          })}
+                        >
+                          <CardContent sx={{ py: 1.25, "&:last-child": { pb: 1.25 } }}>
+                            <Stack direction="row" spacing={1} alignItems="flex-start">
+                              <Chip size="small" label={o.label} color={isCorrect ? "success" : "default"} variant={isCorrect ? "filled" : "outlined"} />
+                              <Box sx={{ flex: 1, minWidth: 0 }}>
+                                <SafeHtml html={o.text_html || ""} />
+                              </Box>
+                            </Stack>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </Stack>
+                </>
+              ) : null}
+
+              {previewSnap.qtype === "tf_multi" && Array.isArray(previewSnap.items) && previewSnap.items.length > 0 ? (
+                <>
+                  <Divider />
+                  <Typography variant="overline" color="text.secondary" letterSpacing={1}>
+                    Các ý (Đúng / Sai)
+                  </Typography>
+                  <Stack spacing={1.25}>
+                    {previewSnap.items.map((it, i) => (
+                      <Card key={`${it.label}-${i}`} variant="outlined">
+                        <CardContent sx={{ py: 1.25, "&:last-child": { pb: 1.25 } }}>
+                          <Stack spacing={1}>
+                            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                              <Chip size="small" label={it.label} variant="outlined" />
+                              <Chip
+                                size="small"
+                                label={it.is_true ? "Đúng" : "Sai"}
+                                color={it.is_true ? "success" : "default"}
+                                variant={it.is_true ? "filled" : "outlined"}
+                              />
+                            </Stack>
+                            <Box sx={{ minWidth: 0 }}>
+                              <SafeHtml html={it.text_html || ""} />
+                            </Box>
+                          </Stack>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </Stack>
+                </>
+              ) : null}
+
+              {previewSnap.explanation_html?.trim() ? (
+                <>
+                  <Divider />
+                  <Typography variant="overline" color="text.secondary" letterSpacing={1}>
+                    Giải thích
+                  </Typography>
+                  <SafeHtml html={previewSnap.explanation_html} />
+                </>
+              ) : null}
+            </Stack>
+          ) : null}
         </DialogContent>
       </Dialog>
 
@@ -758,9 +863,10 @@ export default function AdminExamEdit() {
                     height={220}
                     textareaProps={mdImg.textareaProps}
                     extraCommands={mdImg.extraCommands}
+                    previewOptions={mdEditorMathPreviewOptions}
                   />
                   <Typography variant="caption" color="text.secondary">
-                    Hỗ trợ Markdown; code block: ```cpp / ```sql / ```python. Ảnh: nút upload trên thanh công cụ, paste hoặc kéo thả vào ô soạn.
+                    Hỗ trợ Markdown; LaTeX: `$x^2$`, `$$\\int_0^1 x\\,dx$$`, `\\(a+b\\)`, `\\[E=mc^2\\]`; code: ```cpp / ```sql / ```python. Ảnh: upload / paste / kéo thả.
                   </Typography>
                 </Box>
 
@@ -801,6 +907,7 @@ export default function AdminExamEdit() {
                                   height={120}
                                   textareaProps={mdImg.textareaProps}
                                   extraCommands={mdImg.extraCommands}
+                                  previewOptions={mdEditorMathPreviewOptions}
                                 />
                               </Box>
                             </Stack>
@@ -856,6 +963,7 @@ export default function AdminExamEdit() {
                                   height={120}
                                   textareaProps={mdImg.textareaProps}
                                   extraCommands={mdImg.extraCommands}
+                                  previewOptions={mdEditorMathPreviewOptions}
                                 />
                               </Box>
                             </Stack>
@@ -877,6 +985,7 @@ export default function AdminExamEdit() {
                     height={150}
                     textareaProps={mdImg.textareaProps}
                     extraCommands={mdImg.extraCommands}
+                    previewOptions={mdEditorMathPreviewOptions}
                   />
                 </Box>
               </Stack>
@@ -949,7 +1058,7 @@ export default function AdminExamEdit() {
                 if (editingQuestionId) {
                   await api.admin.updateQuestion(token!, editingQuestionId, previewPayload);
                 } else {
-                  await api.admin.createQuestion(token!, Number(examId), previewPayload);
+                  await api.admin.createQuestion(token!, examId!, previewPayload);
                 }
                 await reloadAll();
                 setOpenAddQuestion(false);
@@ -1092,7 +1201,7 @@ export default function AdminExamEdit() {
                             disabled={!a.submitted_at}
                             onClick={async () => {
                               try {
-                                const d = await api.admin.getAttempt(token!, Number(a.id));
+                                const d = await api.admin.getAttempt(token!, a.id);
                                 setAttemptDetail(d);
                                 setOpenAttemptDetail(true);
                               } catch (e: any) {
@@ -1147,7 +1256,10 @@ export default function AdminExamEdit() {
           ) : (
             <Stack spacing={1.5}>
               <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                <Chip size="small" variant="outlined" label={`Attempt #${attemptDetail.id}`} />
+                {(() => {
+                  const s = formatAttemptDateTime(attemptDetail.started_at);
+                  return s ? <Chip size="small" variant="outlined" label={`Bắt đầu: ${s}`} /> : null;
+                })()}
                 {attemptDetail.user?.email && <Chip size="small" variant="outlined" label={attemptDetail.user.email} />}
                 {attemptDetail.score !== null && attemptDetail.score !== undefined && (
                   <Chip size="small" color="success" variant="outlined" label={`Điểm: ${Number(attemptDetail.score).toFixed(2)}`} />

@@ -69,12 +69,3 @@ class AdminUserUpdateIn(BaseModel):
     # nếu gửi password => reset password user
     password: str | None = Field(default=None, min_length=6, max_length=200)
 
-
-class BlogPostUpsertIn(BaseModel):
-    title: str = Field(min_length=1, max_length=255)
-    slug: str = Field(min_length=1, max_length=255)
-    summary: str | None = None
-    content_markdown: str = ""
-    cover_image_url: str | None = Field(default=None, max_length=500)
-    is_published: bool = False
-

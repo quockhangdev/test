@@ -5,6 +5,9 @@ export const API_BASE = (import.meta.env.VITE_API_BASE?.trim() || API_BASE_DEFAU
 
 export type ApiError = { error: string; details?: unknown };
 
+/** MongoDB ObjectId hex từ API */
+export type Id = string;
+
 type HeaderMap = Record<string, string>;
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -56,25 +59,32 @@ export const api = {
   login: (body: { email: string; password: string }) =>
     request<{
       access_token: string;
-      user: { id: number; email: string; role: "admin" | "student"; full_name: string | null };
+      user: { id: Id; email: string; role: "admin" | "student"; full_name: string | null };
     }>("/auth/login", { method: "POST", body: JSON.stringify(body) }),
 
   me: (token: string) =>
-    request<{ id: number; email: string; role: string; full_name: string | null }>("/me", {
+    request<{ id: Id; email: string; role: string; full_name: string | null }>("/me", {
       headers: authHeader(token)
     }),
 
   listExams: (token: string) =>
-    request<Array<{ id: number; title: string; description: string | null; duration_minutes: number | null; requires_password: boolean; tags: string[]; is_favorite: boolean }>>(
-      "/exams",
-      {
+    request<
+      Array<{
+        id: Id;
+        title: string;
+        description: string | null;
+        duration_minutes: number | null;
+        requires_password: boolean;
+        tags: string[];
+        is_favorite: boolean;
+      }>
+    >("/exams", {
       headers: authHeader(token)
-      }
-    ),
+    }),
 
-  getExam: (token: string, examId: number) =>
+  getExam: (token: string, examId: Id) =>
     request<{
-      id: number;
+      id: Id;
       title: string;
       description: string | null;
       duration_minutes: number | null;
@@ -82,7 +92,7 @@ export const api = {
       tags: string[];
       questions: Array<
         | {
-            id: number;
+            id: Id;
             part: 1 | 2;
             track: "app" | "cs" | null;
             qtype: "mcq";
@@ -93,7 +103,7 @@ export const api = {
             explanation_html: string | null;
           }
         | {
-            id: number;
+            id: Id;
             part: 1 | 2;
             track: "app" | "cs" | null;
             qtype: "tf_multi";
@@ -106,53 +116,41 @@ export const api = {
       >;
     }>(`/exams/${examId}`, { headers: authHeader(token) }),
 
-  startAttempt: (token: string, examId: number, track_chosen: "app" | "cs", access_password?: string) =>
-    request<{ attempt_id: number; track_chosen: "app" | "cs"; expires_at: string | null; duration_minutes: number | null }>(
+  startAttempt: (token: string, examId: Id, track_chosen: "app" | "cs", access_password?: string) =>
+    request<{ attempt_id: Id; track_chosen: "app" | "cs"; expires_at: string | null; duration_minutes: number | null }>(
       `/exams/${examId}/attempts/start`,
       {
-      method: "POST",
-      headers: authHeader(token),
-      body: JSON.stringify({ track_chosen, access_password })
+        method: "POST",
+        headers: authHeader(token),
+        body: JSON.stringify({ track_chosen, access_password })
       }
     ),
 
-  submitAttempt: (token: string, attemptId: number, answers: Record<string, unknown>) =>
+  submitAttempt: (token: string, attemptId: Id, answers: Record<string, unknown>) =>
     request<{ score: number }>(`/attempts/${attemptId}/submit`, {
       method: "POST",
       headers: authHeader(token),
       body: JSON.stringify({ answers })
     }),
 
-  listMyAttempts: (token: string, examId: number) =>
-    request<Array<{ id: number; exam_id: number; track_chosen: "app" | "cs" | null; started_at: string; submitted_at: string | null; score: number | null }>>(
+  listMyAttempts: (token: string, examId: Id) =>
+    request<Array<{ id: Id; exam_id: Id; track_chosen: "app" | "cs" | null; started_at: string; submitted_at: string | null; score: number | null }>>(
       `/exams/${examId}/attempts`,
       { headers: authHeader(token) }
     ),
 
-  getAttempt: (token: string, attemptId: number) =>
-    request<any>(`/attempts/${attemptId}`, { headers: authHeader(token) }),
+  getAttempt: (token: string, attemptId: Id) => request<any>(`/attempts/${attemptId}`, { headers: authHeader(token) }),
 
-  listPosts: (token: string) =>
-    request<Array<{ id: number; title: string; slug: string; summary: string | null; cover_image_url: string | null; created_at: string | null; author: { id: number; email: string; full_name: string | null } | null }>>(
-      "/posts",
-      { headers: authHeader(token) }
-    ),
-  getPost: (token: string, slugOrId: string | number) =>
-    request<{ id: number; title: string; slug: string; summary: string | null; content_markdown: string; cover_image_url: string | null; is_published: boolean; created_at: string | null; author: { id: number; email: string; full_name: string | null } | null }>(
-      `/posts/${slugOrId}`,
-      { headers: authHeader(token) }
-    ),
-
-  favoriteExam: (token: string, examId: number) =>
+  favoriteExam: (token: string, examId: Id) =>
     request<{ ok: boolean; is_favorite: boolean }>(`/exams/${examId}/favorite`, { method: "POST", headers: authHeader(token) }),
-  unfavoriteExam: (token: string, examId: number) =>
+  unfavoriteExam: (token: string, examId: Id) =>
     request<{ ok: boolean; is_favorite: boolean }>(`/exams/${examId}/favorite`, { method: "DELETE", headers: authHeader(token) }),
 
   admin: {
     listExams: (token: string) =>
       request<
         Array<{
-          id: number;
+          id: Id;
           title: string;
           description: string | null;
           is_published: boolean;
@@ -160,22 +158,21 @@ export const api = {
           requires_password: boolean;
           tags: string[];
         }>
-      >(
-        "/admin/exams",
-        { headers: authHeader(token) }
-      ),
+      >("/admin/exams", {
+        headers: authHeader(token)
+      }),
     createExam: (
       token: string,
       body: { title: string; description?: string | null; is_published?: boolean; duration_minutes?: number | null; access_password?: string | null; tags?: string[] }
     ) =>
-      request<{ id: number }>("/admin/exams", {
+      request<{ id: Id }>("/admin/exams", {
         method: "POST",
         headers: authHeader(token),
         body: JSON.stringify(body)
       }),
     updateExam: (
       token: string,
-      examId: number,
+      examId: Id,
       body: { title: string; description?: string | null; is_published?: boolean; duration_minutes?: number | null; access_password?: string | null; tags?: string[] }
     ) =>
       request<{ ok: boolean }>(`/admin/exams/${examId}`, {
@@ -183,54 +180,36 @@ export const api = {
         headers: authHeader(token),
         body: JSON.stringify(body)
       }),
-    deleteExam: (token: string, examId: number) =>
+    deleteExam: (token: string, examId: Id) =>
       request<{ ok: boolean }>(`/admin/exams/${examId}`, { method: "DELETE", headers: authHeader(token) }),
-    listQuestions: (token: string, examId: number) =>
-      request<any[]>(`/admin/exams/${examId}/questions`, { headers: authHeader(token) }),
-    createQuestion: (token: string, examId: number, body: any) =>
-      request<{ id: number }>(`/admin/exams/${examId}/questions`, {
+    listQuestions: (token: string, examId: Id) => request<any[]>(`/admin/exams/${examId}/questions`, { headers: authHeader(token) }),
+    createQuestion: (token: string, examId: Id, body: any) =>
+      request<{ id: Id }>(`/admin/exams/${examId}/questions`, {
         method: "POST",
         headers: authHeader(token),
         body: JSON.stringify(body)
       }),
-    updateQuestion: (token: string, questionId: number, body: any) =>
+    updateQuestion: (token: string, questionId: Id, body: any) =>
       request<{ ok: boolean }>(`/admin/questions/${questionId}`, {
         method: "PUT",
         headers: authHeader(token),
         body: JSON.stringify(body)
       }),
-    deleteQuestion: (token: string, questionId: number) =>
+    deleteQuestion: (token: string, questionId: Id) =>
       request<{ ok: boolean }>(`/admin/questions/${questionId}`, {
         method: "DELETE",
         headers: authHeader(token)
       }),
 
-    listAttempts: (token: string, params: { exam_id?: number; user_id?: number } = {}) => {
+    listAttempts: (token: string, params: { exam_id?: Id; user_id?: Id } = {}) => {
       const qs = new URLSearchParams();
       if (params.exam_id) qs.set("exam_id", String(params.exam_id));
       if (params.user_id) qs.set("user_id", String(params.user_id));
       const suffix = qs.toString() ? `?${qs.toString()}` : "";
       return request<any[]>(`/admin/attempts${suffix}`, { headers: authHeader(token) });
     },
-    getAttempt: (token: string, attemptId: number) =>
-      request<any>(`/admin/attempts/${attemptId}`, { headers: authHeader(token) }),
+    getAttempt: (token: string, attemptId: Id) => request<any>(`/admin/attempts/${attemptId}`, { headers: authHeader(token) }),
 
-    listPosts: (token: string) =>
-      request<any[]>(`/admin/posts`, { headers: authHeader(token) }),
-    createPost: (token: string, body: { title: string; slug: string; summary?: string | null; content_markdown: string; cover_image_url?: string | null; is_published?: boolean }) =>
-      request<{ id: number }>(`/admin/posts`, {
-        method: "POST",
-        headers: authHeader(token),
-        body: JSON.stringify(body)
-      }),
-    updatePost: (token: string, postId: number, body: { title: string; slug: string; summary?: string | null; content_markdown: string; cover_image_url?: string | null; is_published?: boolean }) =>
-      request<{ ok: boolean }>(`/admin/posts/${postId}`, {
-        method: "PUT",
-        headers: authHeader(token),
-        body: JSON.stringify(body)
-      }),
-    deletePost: (token: string, postId: number) =>
-      request<{ ok: boolean }>(`/admin/posts/${postId}`, { method: "DELETE", headers: authHeader(token) }),
     uploadImage: (token: string, file: File) => {
       const fd = new FormData();
       fd.append("image", file);
@@ -245,22 +224,21 @@ export const api = {
       const qs = new URLSearchParams();
       if (params.q) qs.set("q", params.q);
       const suffix = qs.toString() ? `?${qs.toString()}` : "";
-      return request<Array<{ id: number; email: string; full_name: string | null; role: "admin" | "student"; created_at: string | null }>>(
+      return request<Array<{ id: Id; email: string; full_name: string | null; role: "admin" | "student"; created_at: string | null }>>(
         `/admin/users${suffix}`,
         { headers: authHeader(token) }
       );
     },
     updateUser: (
       token: string,
-      userId: number,
+      userId: Id,
       body: { full_name?: string | null; role?: "admin" | "student" | null; password?: string | null }
     ) =>
-      request<{ ok: boolean; user: { id: number; email: string; full_name: string | null; role: "admin" | "student"; created_at: string | null } }>(
+      request<{ ok: boolean; user: { id: Id; email: string; full_name: string | null; role: "admin" | "student"; created_at: string | null } }>(
         `/admin/users/${userId}`,
         { method: "PATCH", headers: authHeader(token), body: JSON.stringify(body) }
       ),
-    deleteUser: (token: string, userId: number) =>
-      request<{ ok: boolean }>(`/admin/users/${userId}`, { method: "DELETE", headers: authHeader(token) }),
+    deleteUser: (token: string, userId: Id) =>
+      request<{ ok: boolean }>(`/admin/users/${userId}`, { method: "DELETE", headers: authHeader(token) })
   }
 };
-

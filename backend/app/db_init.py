@@ -1,32 +1,22 @@
 from __future__ import annotations
 
-from sqlalchemy import text
+import os
 
-from . import create_app, db
+from mongoengine import connect
 
-
-def _sqlite_add_column_if_missing(table: str, column: str, ddl_type: str):
-    # SQLite supports ALTER TABLE ADD COLUMN
-    cols = db.session.execute(text(f"PRAGMA table_info({table})")).fetchall()
-    existing = {row[1] for row in cols}  # row[1] is name
-    if column in existing:
-        return
-    db.session.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_type}"))
+from .models import Attempt, Exam, Favorite, Question, User
 
 
 def main():
-    app = create_app()
-    with app.app_context():
-        db.create_all()
-        # lightweight migrations for existing sqlite db
-        _sqlite_add_column_if_missing("exams", "duration_minutes", "INTEGER")
-        _sqlite_add_column_if_missing("exams", "access_password_hash", "VARCHAR(255)")
-        _sqlite_add_column_if_missing("exams", "tags_json", "TEXT")
-        _sqlite_add_column_if_missing("attempts", "expires_at", "DATETIME")
-        db.session.commit()
-    print("DB initialized.")
+    mongo_uri = os.environ.get("MONGODB_URI", "mongodb://127.0.0.1:27017/onthitinhoc")
+    connect(host=mongo_uri, alias="default")
+    User.ensure_indexes()
+    Exam.ensure_indexes()
+    Favorite.ensure_indexes()
+    Question.ensure_indexes()
+    Attempt.ensure_indexes()
+    print("MongoDB indexes ensured.")
 
 
 if __name__ == "__main__":
     main()
-

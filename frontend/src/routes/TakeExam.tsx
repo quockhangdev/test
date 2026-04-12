@@ -21,6 +21,13 @@ function mcqDisplayOrder(seed: number, n: number): number[] {
 function mcqDisplayLabel(displayIdx: number): string {
   return displayIdx < 26 ? String.fromCharCode(65 + displayIdx) : String(displayIdx + 1);
 }
+
+function hashStringToUint32(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  return h >>> 0;
+}
+
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Alert,
@@ -30,6 +37,7 @@ import {
   Card,
   CardContent,
   Chip,
+  Container,
   Divider,
   Dialog,
   DialogActions,
@@ -40,17 +48,17 @@ import {
   InputLabel,
   IconButton,
   MenuItem,
+  Paper,
   Radio,
   RadioGroup,
   Select,
   Stack,
-  ToggleButton,
-  ToggleButtonGroup,
   TablePagination,
   TextField,
   Toolbar,
   Typography
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
 import SendOutlinedIcon from "@mui/icons-material/SendOutlined";
 import PlayArrowRoundedIcon from "@mui/icons-material/PlayArrowRounded";
@@ -58,6 +66,7 @@ import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import ReplayRoundedIcon from "@mui/icons-material/ReplayRounded";
 import { api } from "../lib/api";
+import { formatAttemptDateTime } from "../lib/attemptUi";
 import { useAuth } from "../lib/auth";
 import { useExamTakingLayout } from "../lib/examTakingLayout";
 import { SafeHtml } from "../components/SafeHtml";
@@ -71,7 +80,7 @@ function parseIsoMaybeUtc(s: string): number {
 
 type Q =
   | {
-      id: number;
+      id: string;
       part: 1 | 2;
       track: "app" | "cs" | null;
       qtype: "mcq";
@@ -80,7 +89,7 @@ type Q =
       points: number;
     }
   | {
-      id: number;
+      id: string;
       part: 1 | 2;
       track: "app" | "cs" | null;
       qtype: "tf_multi";
@@ -142,7 +151,7 @@ export default function TakeExam() {
   const [questions, setQuestions] = useState<Q[]>([]);
 
   const [track, setTrack] = useState<"app" | "cs" | null>(null);
-  const [attemptId, setAttemptId] = useState<number | null>(null);
+  const [attemptId, setAttemptId] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [timeLeftSec, setTimeLeftSec] = useState<number | null>(null);
   const [examPassword, setExamPassword] = useState<string>("");
@@ -158,7 +167,7 @@ export default function TakeExam() {
   const [openResume, setOpenResume] = useState(false);
   const [resumeDraft, setResumeDraft] = useState<{
     track?: "app" | "cs" | null;
-    attemptId?: number | null;
+    attemptId?: string | null;
     expiresAt?: string | null;
     answers?: Record<string, any>;
     activeIdx?: number;
@@ -181,8 +190,8 @@ export default function TakeExam() {
     let alive = true;
     (async () => {
       try {
-        if (!token) return;
-        const ex = await api.getExam(token, Number(examId));
+        if (!token || !examId) return;
+        const ex = await api.getExam(token, examId);
         if (!alive) return;
         setTitle(ex.title);
         setDescription(ex.description);
@@ -291,7 +300,7 @@ export default function TakeExam() {
       if (!raw) return;
       const draft = JSON.parse(raw) as {
         track?: "app" | "cs" | null;
-        attemptId?: number | null;
+        attemptId?: string | null;
         expiresAt?: string | null;
         answers?: Record<string, any>;
         activeIdx?: number;
@@ -312,7 +321,7 @@ export default function TakeExam() {
 
   function applyDraft(draft: {
     track?: "app" | "cs" | null;
-    attemptId?: number | null;
+    attemptId?: string | null;
     expiresAt?: string | null;
     answers?: Record<string, any>;
     activeIdx?: number;
@@ -432,7 +441,7 @@ export default function TakeExam() {
     if (!token) throw new Error("no_token");
     if (!track) throw new Error("missing_track");
     if (attemptId) return attemptId;
-    const res = await api.startAttempt(token, Number(examId), track, requiresPassword ? examPassword : undefined);
+    const res = await api.startAttempt(token, examId!, track, requiresPassword ? examPassword : undefined);
     setScore(null);
     setShowScoreSplash(false);
     setAttemptId(res.attempt_id);
@@ -494,149 +503,6 @@ export default function TakeExam() {
 
   const errUi = err ? formatErrMessage(err) : null;
 
-  const examQuestionGrid = (
-    <Box
-      sx={{
-        flex: 1,
-        minHeight: 0,
-        display: "flex",
-        flexDirection: { xs: "column", md: "row" },
-        gap: { xs: 1.5, md: 2 },
-        overflow: "hidden"
-      }}
-    >
-      <Box
-        sx={{
-          flexShrink: 0,
-          width: { xs: "100%", md: 260 },
-          maxWidth: { md: 300 },
-          maxHeight: { xs: "min(40vh, 260px)", md: "100%" },
-          overflowY: "auto",
-          alignSelf: { md: "stretch" }
-        }}
-      >
-        <Card variant="outlined">
-          <CardContent sx={{ p: { xs: 1, md: 1.25 } }}>
-            <Stack spacing={1.25}>
-              <Stack direction="row" alignItems="center" justifyContent="space-between">
-                <Typography fontWeight={800} variant="body2">
-                  Câu hỏi
-                </Typography>
-              </Stack>
-              <ToggleButtonGroup
-                exclusive
-                value={String(activeIdx)}
-                onChange={(_, v) => {
-                  if (v === null) return;
-                  setActiveIdx(Number(v));
-                }}
-                sx={{
-                  display: "grid",
-                  gridTemplateColumns: { xs: "repeat(6, minmax(0, 1fr))", md: "repeat(5, minmax(0, 1fr))" },
-                  gap: 0.5,
-                  width: "100%",
-                  "& .MuiToggleButtonGroup-grouped": {
-                    borderRadius: 1.5,
-                    border: "1px solid",
-                    borderColor: "divider",
-                    m: 0
-                  }
-                }}
-              >
-                {visibleQuestions.map((q, idx) => (
-                  <ToggleButton
-                    key={q.id}
-                    value={String(idx)}
-                    size="small"
-                    sx={{
-                      minWidth: 0,
-                      width: "100%",
-                      py: 0.55,
-                      fontWeight: 600,
-                      ...(isAnswered(q)
-                        ? {
-                            bgcolor: idx === activeIdx ? "success.main" : "success.light",
-                            color: idx === activeIdx ? "success.contrastText" : "success.main",
-                            border: "1px solid",
-                            borderColor: "success.main",
-                            "&:hover": {
-                              bgcolor: idx === activeIdx ? "success.dark" : "success.main",
-                              borderColor: "success.dark"
-                            }
-                          }
-                        : null)
-                    }}
-                    color={isAnswered(q) ? "success" : "primary"}
-                  >
-                    {idx + 1}
-                  </ToggleButton>
-                ))}
-              </ToggleButtonGroup>
-              <Stack direction="row" spacing={1}>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  disabled={activeIdx <= 0}
-                  onClick={() => setActiveIdx((i) => Math.max(0, i - 1))}
-                  fullWidth
-                  sx={{ borderRadius: 999 }}
-                >
-                  Trước
-                </Button>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  disabled={activeIdx >= visibleQuestions.length - 1}
-                  onClick={() => setActiveIdx((i) => Math.min(visibleQuestions.length - 1, i + 1))}
-                  fullWidth
-                  sx={{ borderRadius: 999 }}
-                >
-                  Sau
-                </Button>
-              </Stack>
-              <Typography variant="body2" color="text.secondary">
-                {activeQ ? (
-                  <>
-                    Câu {activeNumber}/{visibleQuestions.length} •{" "}
-                    {activeQ.part === 1
-                      ? "Phần 1"
-                      : activeQ.track === null
-                        ? "Phần 2.1"
-                        : `Phần 2.2 - ${trackLabel(activeQ.track)}`}
-                  </>
-                ) : null}
-              </Typography>
-            </Stack>
-          </CardContent>
-        </Card>
-      </Box>
-      <Box
-        sx={{
-          flex: 1,
-          minWidth: 0,
-          minHeight: 0,
-          overflowY: "auto",
-          WebkitOverflowScrolling: "touch"
-        }}
-      >
-        {activeQ ? (
-          <QuestionView
-            key={activeQ.id}
-            index={activeNumber}
-            q={activeQ}
-            value={answers[String(activeQ.id)]}
-            onChange={(v) => setAnswers((a) => ({ ...a, [String(activeQ.id)]: v }))}
-            mcqShuffleSeed={
-              attemptId != null ? (attemptId * 1000003 + activeQ.id) >>> 0 : (Number(examId) * 1000003 + activeQ.id) >>> 0
-            }
-          />
-        ) : (
-          <Alert severity="info">Không có câu hỏi.</Alert>
-        )}
-      </Box>
-    </Box>
-  );
-
   return (
     <Box
       sx={{
@@ -680,7 +546,7 @@ export default function TakeExam() {
                 <Chip size="small" variant="outlined" label={`Định hướng: ${trackLabel(resumeDraft.track)}`} />
               )}
               {resumeDraft?.attemptId && (
-                <Chip size="small" variant="outlined" label={`Attempt #${resumeDraft.attemptId}`} />
+                <Chip size="small" variant="outlined" label="Lượt làm đang dở (đã lưu trên máy)" />
               )}
               {resumeTimeLeftSec !== null && (
                 <Chip
@@ -936,7 +802,7 @@ export default function TakeExam() {
                       setOpenHistory(true);
                       setHistoryBusy(true);
                       setHistoryPage(0);
-                      const rows = await api.listMyAttempts(token!, Number(examId));
+                      const rows = await api.listMyAttempts(token!, examId!);
                       setHistoryRows(rows);
                     } catch (e: any) {
                       setErr(e?.message || "history_failed");
@@ -1008,15 +874,15 @@ export default function TakeExam() {
             <Toolbar
               variant="dense"
               sx={{
-                gap: { xs: 0.5, sm: 1.5 },
+                gap: { xs: 0.5, sm: 1 },
                 flexWrap: "wrap",
-                px: { xs: 1, sm: 2 },
-                py: 0.5,
-                minHeight: 48
+                px: { xs: 1, sm: 1.5 },
+                py: 0.25,
+                minHeight: 40
               }}
             >
               <Stack direction="row" alignItems="center" spacing={1} sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="subtitle2" fontWeight={800} noWrap title={title}>
+                <Typography variant="body2" fontWeight={800} noWrap title={title} sx={{ fontSize: "0.8125rem" }}>
                   {title}
                 </Typography>
                 {track && (
@@ -1028,13 +894,13 @@ export default function TakeExam() {
                   />
                 )}
               </Stack>
-              <Box sx={{ flexShrink: 0, minWidth: { xs: 64, sm: 80 }, textAlign: "center" }}>
+              <Box sx={{ flexShrink: 0, minWidth: { xs: 56, sm: 72 }, textAlign: "center" }}>
                 {expiresAt && timeLeftSec !== null ? (
                   <Typography
                     sx={{
                       fontVariantNumeric: "tabular-nums",
                       fontWeight: 700,
-                      fontSize: { xs: "0.95rem", sm: "1.1rem" },
+                      fontSize: { xs: "0.8125rem", sm: "0.9rem" },
                       color: timeLeftSec <= 60 ? "warning.main" : "text.primary"
                     }}
                   >
@@ -1064,12 +930,9 @@ export default function TakeExam() {
               </Stack>
             </Toolbar>
           </AppBar>
-          <Toolbar variant="dense" sx={{ minHeight: 48 }} />
+          <Toolbar variant="dense" sx={{ minHeight: 40 }} />
           <Box
             sx={{
-              px: { xs: 1, sm: 2 },
-              pb: 2,
-              pt: 0,
               flex: 1,
               minHeight: 0,
               display: "flex",
@@ -1077,17 +940,152 @@ export default function TakeExam() {
               overflow: "hidden"
             }}
           >
-            {err && (
-              <Alert severity={errUi!.severity} sx={{ mb: 2, flexShrink: 0 }}>
-                {errUi!.text}
-              </Alert>
-            )}
-            {visibleQuestions.length === 0 ? (
-              <Alert severity="info">Chưa có câu hỏi cho đề này.</Alert>
-            ) : (
-              examQuestionGrid
-            )}
+            <Box
+              sx={{
+                flex: 1,
+                minHeight: 0,
+                overflowY: "auto",
+                WebkitOverflowScrolling: "touch",
+                px: { xs: 1, sm: 1.5 },
+                pt: 0,
+                pb:
+                  visibleQuestions.length > 0
+                    ? "calc(96px + env(safe-area-inset-bottom, 0px))"
+                    : { xs: 1.5, sm: 1.5 }
+              }}
+            >
+              {err && (
+                <Alert severity={errUi!.severity} sx={{ mb: 1, py: 0.5, flexShrink: 0 }}>
+                  {errUi!.text}
+                </Alert>
+              )}
+              {visibleQuestions.length === 0 ? (
+                <Alert severity="info">Chưa có câu hỏi cho đề này.</Alert>
+              ) : (
+                <Container maxWidth="lg" sx={{ py: { xs: 0.5, sm: 0.75 } }}>
+                  {activeQ ? (
+                    <QuestionView
+                      key={activeQ.id}
+                      index={activeNumber}
+                      q={activeQ}
+                      value={answers[String(activeQ.id)]}
+                      onChange={(v) => setAnswers((a) => ({ ...a, [String(activeQ.id)]: v }))}
+                      mcqShuffleSeed={hashStringToUint32(
+                        attemptId != null ? `a:${attemptId}:${activeQ.id}` : `e:${examId}:${activeQ.id}`
+                      )}
+                    />
+                  ) : (
+                    <Alert severity="info">Không có câu hỏi.</Alert>
+                  )}
+                </Container>
+              )}
+            </Box>
           </Box>
+          {visibleQuestions.length > 0 && (
+            <Paper
+              component="nav"
+              aria-label="Chuyển câu hỏi"
+              elevation={8}
+              square
+              sx={(theme) => ({
+                position: "fixed",
+                left: 0,
+                right: 0,
+                bottom: 0,
+                zIndex: theme.zIndex.appBar - 1,
+                borderTop: 1,
+                borderColor: "divider",
+                background:
+                  theme.palette.mode === "dark"
+                    ? `linear-gradient(180deg, ${theme.palette.grey[900]}f2 0%, ${theme.palette.background.paper} 100%)`
+                    : `linear-gradient(180deg, ${theme.palette.grey[50]} 0%, ${theme.palette.background.paper} 100%)`,
+                pt: 0.75,
+                pb: `calc(8px + env(safe-area-inset-bottom, 0px))`,
+                boxShadow: theme.shadows[8]
+              })}
+            >
+              <Container maxWidth="lg" sx={{ px: { xs: 1.5, sm: 2 } }}>
+                <Stack spacing={0.75}>
+                  <Box sx={{ overflowX: "auto", WebkitOverflowScrolling: "touch", mx: { xs: -0.25, sm: 0 } }}>
+                    <Stack direction="row" useFlexGap flexWrap="nowrap" gap={0.375} sx={{ width: "max-content", minWidth: 0 }}>
+                      {visibleQuestions.map((qItem, idx) => {
+                        const active = activeIdx === idx;
+                        const answered = isAnswered(qItem);
+                        return (
+                          <Button
+                            key={qItem.id}
+                            size="small"
+                            variant={active ? "contained" : "outlined"}
+                            color={answered ? "success" : "primary"}
+                            disableElevation
+                            onClick={() => setActiveIdx(idx)}
+                            sx={{
+                              flexShrink: 0,
+                              minWidth: 30,
+                              fontWeight: 700,
+                              fontSize: "0.75rem",
+                              px: 0.5,
+                              py: 0.25,
+                              lineHeight: 1.2,
+                              borderRadius: 1
+                            }}
+                          >
+                            {idx + 1}
+                          </Button>
+                        );
+                      })}
+                    </Stack>
+                  </Box>
+                  <Stack direction="row" alignItems="center" justifyContent="space-between" gap={0.75} flexWrap="nowrap">
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      disabled={activeIdx <= 0}
+                      onClick={() => setActiveIdx((i) => Math.max(0, i - 1))}
+                      sx={{ borderRadius: 99, minWidth: 0, px: 1, py: 0.25, fontSize: "0.75rem" }}
+                    >
+                      ← Trước
+                    </Button>
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{
+                        flex: 1,
+                        textAlign: "center",
+                        minWidth: 0,
+                        lineHeight: 1.25,
+                        fontSize: "0.7rem",
+                        display: "block"
+                      }}
+                    >
+                      {activeQ ? (
+                        <>
+                          Câu <strong>{activeNumber}</strong>/{visibleQuestions.length}
+                          {" · "}
+                          {activeQ.part === 1
+                            ? "P.1"
+                            : activeQ.track === null
+                              ? "P.2.1"
+                              : activeQ.track === "app"
+                                ? "P.2.2 · Ứng dụng"
+                                : "P.2.2 · KHMT"}
+                        </>
+                      ) : null}
+                    </Typography>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      disabled={activeIdx >= visibleQuestions.length - 1}
+                      onClick={() => setActiveIdx((i) => Math.min(visibleQuestions.length - 1, i + 1))}
+                      sx={{ borderRadius: 99, minWidth: 0, px: 1, py: 0.25, fontSize: "0.75rem" }}
+                    >
+                      Sau →
+                    </Button>
+                  </Stack>
+                </Stack>
+              </Container>
+            </Paper>
+          )}
         </>
       )}
 
@@ -1109,12 +1107,19 @@ export default function TakeExam() {
           )}
           {!historyBusy && historyRows && historyRows.length > 0 && (
             <Stack spacing={1}>
-              {pagedHistory.map((r) => (
+              {pagedHistory.map((r, idx) => {
+                const startedLabel = formatAttemptDateTime(r.started_at);
+                return (
                 <Card key={r.id} variant="outlined">
                   <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
                     <Stack direction={{ xs: "column", md: "row" }} spacing={1} alignItems={{ md: "center" }} justifyContent="space-between">
                       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                        <Chip size="small" variant="outlined" label={`#${r.id}`} />
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          label={`Lượt ${historyPage * historyRpp + idx + 1}`}
+                          title={startedLabel ? `Bắt đầu: ${startedLabel}` : undefined}
+                        />
                         <Chip size="small" variant="outlined" label={`Định hướng: ${trackLabel(r.track_chosen)}`} />
                         <Chip size="small" variant="outlined" label={r.submitted_at ? "Đã nộp" : "Chưa nộp"} color={r.submitted_at ? "success" : "default"} />
                         {r.score !== null && <Chip size="small" variant="outlined" label={`Điểm: ${Number(r.score).toFixed(2)}`} color="success" />}
@@ -1125,7 +1130,7 @@ export default function TakeExam() {
                         disabled={!r.submitted_at}
                         onClick={async () => {
                           try {
-                            const detail = await api.getAttempt(token!, Number(r.id));
+                            const detail = await api.getAttempt(token!, r.id);
                             setReview(detail);
                             setOpenReview(true);
                           } catch (e: any) {
@@ -1138,7 +1143,8 @@ export default function TakeExam() {
                     </Stack>
                   </CardContent>
                 </Card>
-              ))}
+              );
+              })}
               <TablePagination
                 component="div"
                 count={historyRows.length}
@@ -1172,7 +1178,10 @@ export default function TakeExam() {
           ) : (
             <Stack spacing={1.5}>
               <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                <Chip size="small" variant="outlined" label={`Attempt #${review.id}`} />
+                {(() => {
+                  const s = formatAttemptDateTime(review.started_at);
+                  return s ? <Chip size="small" variant="outlined" label={`Bắt đầu: ${s}`} /> : null;
+                })()}
                 {review.score !== null && <Chip size="small" color="success" variant="outlined" label={`Điểm: ${Number(review.score).toFixed(2)}`} />}
                 {review.track_chosen && <Chip size="small" variant="outlined" label={`Định hướng: ${trackLabel(review.track_chosen)}`} />}
               </Stack>
@@ -1266,19 +1275,21 @@ function QuestionView({
   );
 
   return (
-    <Card variant="outlined" sx={{ mr: { xs: 0, md: 3 } }}>
-      <CardContent sx={{ p: { xs: 1.5, md: 2 }, pr: { xs: 2.5, md: 2 } }}>
-        <Stack spacing={1}>
-          <Stack direction="row" alignItems="baseline" spacing={1}>
-            <Typography fontWeight={800}>Câu {index}</Typography>
-            <Typography color="text.secondary" variant="body2">
+    <Card variant="outlined" sx={{ width: 1 }}>
+      <CardContent sx={{ p: { xs: 1, sm: 1.25 }, "&:last-child": { pb: { xs: 1, sm: 1.25 } } }}>
+        <Stack spacing={0.75}>
+          <Stack direction="row" alignItems="center" spacing={0.75} flexWrap="wrap" useFlexGap>
+            <Typography fontWeight={800} variant="body2" sx={{ fontSize: "0.875rem" }}>
+              Câu {index}
+            </Typography>
+            <Typography color="text.secondary" variant="caption">
               ({q.points}đ)
             </Typography>
           </Stack>
           <SafeHtml html={q.prompt_html} />
-          <Divider />
+          <Divider sx={{ my: 0 }} />
           {q.qtype === "mcq" ? (
-            <Stack spacing={0.75} role="radiogroup" aria-label="Đáp án">
+            <Stack spacing={0.5} role="radiogroup" aria-label="Đáp án">
               {mcqOrder.map((origIdx, displayIdx) => {
                 const opt = q.options[origIdx];
                 const checked = value?.choiceIndex === origIdx;
@@ -1286,22 +1297,43 @@ function QuestionView({
                   <Box
                     key={origIdx}
                     onClick={() => onChange({ type: "mcq", choiceIndex: origIdx })}
-                    sx={{
+                    sx={(theme) => ({
                       display: "flex",
                       alignItems: "flex-start",
-                      gap: 1,
+                      gap: 0.75,
                       p: 1,
-                      borderRadius: 2,
+                      borderRadius: 1.5,
                       cursor: "pointer",
-                      "&:hover": { bgcolor: "action.hover" }
-                    }}
+                      border: "1px solid",
+                      borderColor: checked ? "primary.main" : "divider",
+                      bgcolor: checked ? alpha(theme.palette.primary.main, 0.06) : "background.paper",
+                      transition: theme.transitions.create(["border-color", "background-color"], {
+                        duration: theme.transitions.duration.shorter
+                      }),
+                      "&:hover": {
+                        bgcolor: checked ? alpha(theme.palette.primary.main, 0.09) : "action.hover",
+                        borderColor: checked ? "primary.main" : "action.focus"
+                      }
+                    })}
                   >
-                    <Radio
-                      checked={checked}
-                      onChange={() => onChange({ type: "mcq", choiceIndex: origIdx })}
-                    />
-                    <Chip label={mcqDisplayLabel(displayIdx)} size="small" variant="outlined" sx={{ mt: 0.5 }} />
-                    <Box sx={{ flex: 1, minWidth: 0, pt: 0.25 }}>
+                    <Stack direction="row" alignItems="center" spacing={0.5} sx={{ flexShrink: 0 }}>
+                      <Radio
+                        size="small"
+                        checked={checked}
+                        onChange={() => onChange({ type: "mcq", choiceIndex: origIdx })}
+                      />
+                      <Chip label={mcqDisplayLabel(displayIdx)} size="small" variant="outlined" />
+                    </Stack>
+                    <Box
+                      sx={(theme) => ({
+                        flex: 1,
+                        minWidth: 0,
+                        pt: theme.spacing(0.75),
+                        "& .safe-html-root > :first-child": { marginTop: 0 },
+                        "& .safe-html-root p:first-of-type": { marginTop: 0 },
+                        "& .safe-html-root > ul:first-child, & .safe-html-root > ol:first-child": { marginTop: 0 }
+                      })}
+                    >
                       <SafeHtml html={opt.text_html} />
                     </Box>
                   </Box>
@@ -1309,35 +1341,70 @@ function QuestionView({
               })}
             </Stack>
           ) : (
-            <Stack spacing={1}>
+            <Stack spacing={0.5}>
               {q.items.map((it) => {
                 const current = value?.items?.[it.label];
+                const answered = current === true || current === false;
                 return (
-                  <Card key={it.label} variant="outlined" sx={{ bgcolor: "background.paper" }}>
-                    <CardContent sx={{ py: 1.25, "&:last-child": { pb: 1.25 } }}>
-                      <Stack spacing={1}>
-                        <Stack direction="row" spacing={1} alignItems="flex-start">
-                          <Chip label={it.label} size="small" variant="outlined" />
-                          <Box sx={{ flex: 1 }}>
-                            <SafeHtml html={it.text_html} />
-                          </Box>
-                        </Stack>
-                        <RadioGroup
-                          row
-                          value={current === true ? "true" : current === false ? "false" : ""}
-                          onChange={(_: React.ChangeEvent<HTMLInputElement>, v: string) =>
-                            onChange({
-                              type: "tf_multi",
-                              items: { ...(value?.items || {}), [it.label]: v === "true" }
-                            })
-                          }
-                        >
-                          <FormControlLabel value="true" control={<Radio size="small" />} label="Đúng" />
-                          <FormControlLabel value="false" control={<Radio size="small" />} label="Sai" />
-                        </RadioGroup>
-                      </Stack>
-                    </CardContent>
-                  </Card>
+                  <Box
+                    key={it.label}
+                    sx={(theme) => ({
+                      border: "1px solid",
+                      borderRadius: 1.5,
+                      p: 1,
+                      borderColor: answered ? "primary.main" : "divider",
+                      bgcolor: answered ? alpha(theme.palette.primary.main, 0.06) : "background.paper",
+                      transition: theme.transitions.create(["border-color", "background-color"], {
+                        duration: theme.transitions.duration.shorter
+                      }),
+                      "&:hover": {
+                        bgcolor: answered ? alpha(theme.palette.primary.main, 0.09) : "action.hover",
+                        borderColor: answered ? "primary.main" : "action.focus"
+                      }
+                    })}
+                  >
+                    <Box
+                      sx={{
+                        display: "grid",
+                        gridTemplateColumns: "auto 1fr",
+                        alignItems: "start",
+                        columnGap: 0.75,
+                        rowGap: 0.75
+                      }}
+                    >
+                      <Chip
+                        label={it.label}
+                        size="small"
+                        variant="outlined"
+                        sx={(theme) => ({ flexShrink: 0, mt: theme.spacing(0.75), height: 24, fontSize: "0.7rem" })}
+                      />
+                      <Box
+                        sx={(theme) => ({
+                          minWidth: 0,
+                          pt: theme.spacing(0.75),
+                          "& .safe-html-root > :first-child": { marginTop: 0 },
+                          "& .safe-html-root p:first-of-type": { marginTop: 0 },
+                          "& .safe-html-root > ul:first-child, & .safe-html-root > ol:first-child": { marginTop: 0 }
+                        })}
+                      >
+                        <SafeHtml html={it.text_html} />
+                      </Box>
+                      <RadioGroup
+                        row
+                        value={current === true ? "true" : current === false ? "false" : ""}
+                        onChange={(_: React.ChangeEvent<HTMLInputElement>, v: string) =>
+                          onChange({
+                            type: "tf_multi",
+                            items: { ...(value?.items || {}), [it.label]: v === "true" }
+                          })
+                        }
+                        sx={{ gridColumn: 2, flexWrap: "wrap", gap: 0.5 }}
+                      >
+                        <FormControlLabel value="true" control={<Radio size="small" />} label="Đúng" />
+                        <FormControlLabel value="false" control={<Radio size="small" />} label="Sai" />
+                      </RadioGroup>
+                    </Box>
+                  </Box>
                 );
               })}
             </Stack>

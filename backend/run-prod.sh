@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Chạy backend Flask ở chế độ production (Gunicorn).
-# Dùng từ thư mục repo: ./backend/run-prod.sh hoặc cd backend && ./run-prod.sh
+# Chạy backend Flask production bằng Waitress (WSGI, đa luồng).
+# Dùng từ repo: ./backend/run-prod.sh hoặc cd backend && ./run-prod.sh
 #
 # Biến môi trường (tuỳ chọn):
 #   HOST       — mặc định 0.0.0.0
 #   PORT       — mặc định 5000
-#   WORKERS    — số worker Gunicorn, mặc định 4
-#   FLASK_ENV  — nên đặt production (mặc định script set production)
+#   THREADS    — số thread xử lý request, mặc định 4
+#   FLASK_ENV  — nên đặt production (script set mặc định production)
 #
-# Cần: pip install -r requirements.txt (có gunicorn)
+# Cần: pip install -r requirements.txt (có waitress)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -34,9 +34,11 @@ export FLASK_ENV="${FLASK_ENV:-production}"
 
 HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-5000}"
-WORKERS="${WORKERS:-4}"
+THREADS="${THREADS:-4}"
 
-exec gunicorn \
-  --bind "${HOST}:${PORT}" \
-  --workers "${WORKERS}" \
-  'app:create_app()'
+exec waitress-serve \
+  --host="${HOST}" \
+  --port="${PORT}" \
+  --threads="${THREADS}" \
+  --call \
+  app:create_app
