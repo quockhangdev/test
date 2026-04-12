@@ -12,6 +12,14 @@ function isImageFile(f: File): boolean {
   return f.type.startsWith("image/");
 }
 
+/** Escape for double-quoted HTML attribute values (e.g. img src). */
+function escapeHtmlAttr(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+}
+
+/** Default sizing for inserted images (responsive, không vỡ layout). */
+const DEFAULT_IMG_STYLE = "width: 100%; max-width: 720px; height: auto;";
+
 export type MdEditorImageUploadConfig = {
   token: string | null | undefined;
   onError?: (message: string) => void;
@@ -28,7 +36,10 @@ export function useMdEditorImageUpload(config: MdEditorImageUploadConfig) {
       }
       try {
         const { url } = await api.admin.uploadImage(token, file);
-        insertTextAtPosition(textarea, `\n![](${url})\n`);
+        insertTextAtPosition(
+          textarea,
+          `\n<img src="${escapeHtmlAttr(url)}" alt="" style="${escapeHtmlAttr(DEFAULT_IMG_STYLE)}" />\n`
+        );
       } catch (e: unknown) {
         const msg = e && typeof e === "object" && "message" in e ? String((e as { message?: string }).message) : "upload_failed";
         onError?.(msg);

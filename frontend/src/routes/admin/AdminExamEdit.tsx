@@ -56,6 +56,7 @@ import "@uiw/react-markdown-preview/markdown.css";
 import { api } from "../../lib/api";
 import { formatAttemptDateTime } from "../../lib/attemptUi";
 import { useAuth } from "../../lib/auth";
+import { useMdEditorCodeCompare } from "../../lib/mdEditorCodeCompare";
 import { useMdEditorImageUpload } from "../../lib/mdEditorImageUpload";
 import { mdEditorMathPreviewOptions } from "../../lib/markdownMath";
 import { SafeHtml } from "../../components/SafeHtml";
@@ -113,6 +114,11 @@ export default function AdminExamEdit() {
   const [attemptsRpp, setAttemptsRpp] = useState(10);
 
   const mdImg = useMdEditorImageUpload({ token, onError: setErr });
+  const mdCodeCompare = useMdEditorCodeCompare();
+  const mdEditorCommands = useMemo(
+    () => [...mdImg.extraCommands, ...mdCodeCompare.extraCommands],
+    [mdImg.extraCommands, mdCodeCompare.extraCommands]
+  );
 
   // exam form
   const [title, setTitle] = useState("");
@@ -862,7 +868,7 @@ export default function AdminExamEdit() {
                     preview="edit"
                     height={220}
                     textareaProps={mdImg.textareaProps}
-                    extraCommands={mdImg.extraCommands}
+                    extraCommands={mdEditorCommands}
                     previewOptions={mdEditorMathPreviewOptions}
                   />
                   <Typography variant="caption" color="text.secondary">
@@ -906,7 +912,7 @@ export default function AdminExamEdit() {
                                   preview="edit"
                                   height={120}
                                   textareaProps={mdImg.textareaProps}
-                                  extraCommands={mdImg.extraCommands}
+                                  extraCommands={mdEditorCommands}
                                   previewOptions={mdEditorMathPreviewOptions}
                                 />
                               </Box>
@@ -962,7 +968,7 @@ export default function AdminExamEdit() {
                                   preview="edit"
                                   height={120}
                                   textareaProps={mdImg.textareaProps}
-                                  extraCommands={mdImg.extraCommands}
+                                  extraCommands={mdEditorCommands}
                                   previewOptions={mdEditorMathPreviewOptions}
                                 />
                               </Box>
@@ -984,7 +990,7 @@ export default function AdminExamEdit() {
                     preview="edit"
                     height={150}
                     textareaProps={mdImg.textareaProps}
-                    extraCommands={mdImg.extraCommands}
+                    extraCommands={mdEditorCommands}
                     previewOptions={mdEditorMathPreviewOptions}
                   />
                 </Box>
@@ -1337,6 +1343,8 @@ export default function AdminExamEdit() {
           )}
         </DialogContent>
       </Dialog>
+
+      {mdCodeCompare.dialog}
     </Stack>
   );
 }

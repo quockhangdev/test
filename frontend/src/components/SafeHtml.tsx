@@ -2,10 +2,12 @@ import React, { useEffect, useMemo, useRef } from "react";
 import DOMPurify from "dompurify";
 import type { Config } from "dompurify";
 import hljs from "highlight.js";
+import cpp from "highlight.js/lib/languages/cpp";
 import python from "highlight.js/lib/languages/python";
 import "highlight.js/styles/github.css";
 import { markdownItWithMath } from "../lib/markdownMath";
 
+hljs.registerLanguage("cpp", cpp);
 // Ensure we highlight Python when user uses `class="language-python"` (or `language-py`).
 hljs.registerLanguage("python", python);
 hljs.registerLanguage("py", python);
